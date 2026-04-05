@@ -1,0 +1,1600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>RL Emergency Optimizer — Full Implementation</title>
+<style>
+:root {
+  --bg: #060a12;
+  --surface: #0d1321;
+  --surface2: #141d2e;
+  --border: rgba(99,120,160,0.18);
+  --border2: rgba(99,120,160,0.32);
+  --text: #d4daf0;
+  --muted: #6b7a9a;
+  --blue: #3b82f6;
+  --green: #22c55e;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --cyan: #06b6d4;
+  --purple: #a78bfa;
+  --font: 'Courier New', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* TOPBAR */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.topbar-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--cyan);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.metrics-row {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  justify-content: center;
+}
+
+.metric {
+  text-align: center;
+  line-height: 1.3;
+}
+.metric-val { font-size: 18px; font-weight: bold; color: var(--green); }
+.metric-val.red { color: var(--red); }
+.metric-val.amber { color: var(--amber); }
+.metric-val.cyan { color: var(--cyan); }
+.metric-val.purple { color: var(--purple); }
+.metric-label { color: var(--muted); font-size: 10px; letter-spacing: 0.05em; }
+
+.ep-badge {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  color: var(--cyan);
+  white-space: nowrap;
+}
+.live-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  margin-right: 5px;
+  animation: pulse 1.2s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* TABS */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  padding: 6px 14px;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-bottom: none;
+  font-family: var(--font);
+  font-size: 11px;
+  background: none;
+  transition: all 0.15s;
+}
+.tab.active {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--border);
+}
+.tab:hover:not(.active) { color: var(--text); }
+
+/* MAIN */
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* CANVAS AREA */
+.canvas-wrap {
+  flex: 3;
+  position: relative;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+.tab-content { display: none; width: 100%; height: 100%; }
+.tab-content.active { display: block; }
+
+/* CHART CANVAS */
+#rewardChart {
+  width: 100% !important;
+  height: 100% !important;
+  padding: 16px;
+}
+
+/* RIGHT PANEL */
+.side {
+  width: 280px;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  background: var(--surface);
+}
+
+.panel {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+}
+.panel-title {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--cyan);
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+/* BUTTONS */
+.btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--blue); color: var(--blue); }
+.btn.active { background: var(--blue); border-color: var(--blue); color: white; }
+.btn.danger { border-color: var(--border); }
+.btn.danger:hover { border-color: var(--red); color: var(--red); }
+
+/* TASK SELECT */
+select {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-family: var(--font);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+/* UNITS */
+.unit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.unit-row:last-child { border: none; }
+.unit-icon { font-size: 14px; width: 20px; flex-shrink: 0; }
+.unit-info { flex: 1; min-width: 0; }
+.unit-name { font-size: 10px; color: var(--muted); }
+.unit-status { font-size: 11px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fuel-bar { height: 3px; background: rgba(99,120,160,0.2); border-radius: 2px; margin-top: 3px; }
+.fuel-fill { height: 3px; border-radius: 2px; transition: width 0.3s; }
+
+/* QVAL BARS */
+.qval-row { margin-bottom: 5px; }
+.qval-header { display: flex; justify-content: space-between; margin-bottom: 2px; }
+.qval-label { font-size: 10px; color: var(--muted); }
+.qval-num { font-size: 10px; color: var(--text); }
+.qval-bar { height: 4px; background: rgba(99,120,160,0.2); border-radius: 2px; }
+.qval-fill { height: 4px; border-radius: 2px; background: var(--blue); transition: width 0.4s; }
+.qval-fill.best { background: var(--green); }
+
+/* INCIDENTS */
+.inc-item {
+  padding: 5px 7px;
+  background: var(--surface2);
+  border-radius: 4px;
+  border-left: 2px solid var(--red);
+  margin-bottom: 4px;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.inc-item.medium { border-color: var(--amber); }
+.inc-item.low { border-color: var(--green); }
+.inc-pri { font-size: 9px; padding: 1px 4px; border-radius: 2px; }
+.inc-pri.high { background: rgba(239,68,68,0.2); color: var(--red); }
+.inc-pri.medium { background: rgba(245,158,11,0.2); color: var(--amber); }
+.inc-pri.low { background: rgba(34,197,94,0.2); color: var(--green); }
+
+/* EPISODE LOG */
+.log-scroll {
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.log-line { padding: 1px 0; }
+.log-line.good { color: var(--green); }
+.log-line.warn { color: var(--amber); }
+.log-line.info { color: var(--cyan); }
+
+/* LLM PANEL */
+.llm-output {
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: var(--surface2);
+  border-radius: 4px;
+  padding: 8px;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+}
+.llm-score-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.score-badge {
+  font-size: 20px;
+  font-weight: bold;
+  color: var(--green);
+}
+
+/* SPEED SLIDER */
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+input[type=range] {
+  flex: 1;
+  accent-color: var(--blue);
+  height: 3px;
+}
+
+/* EPSILON DISPLAY */
+.epsilon-bar { height: 4px; background: rgba(167,139,250,0.2); border-radius: 2px; margin-top: 4px; }
+.epsilon-fill { height: 4px; border-radius: 2px; background: var(--purple); transition: width 0.5s; }
+
+/* REWARD CHART */
+#rewardCanvas { background: var(--bg); }
+
+/* GRADER OUTPUT */
+.grader-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 6px;
+}
+.grader-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+.grader-card-val { font-size: 16px; font-weight: bold; margin-bottom: 2px; }
+.grader-card-label { font-size: 9px; color: var(--muted); }
+
+/* INCIDENT MAP OVERLAY */
+.heatmap-legend {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(13,19,33,0.85);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--muted);
+  pointer-events: none;
+}
+.heatmap-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-title">⚡ RL EMERGENCY OPTIMIZER</div>
+  <div class="metrics-row">
+    <div class="metric">
+      <div class="metric-val" id="m-incidents">0</div>
+      <div class="metric-label">INCIDENTS</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val" id="m-resolved">0</div>
+      <div class="metric-label">RESOLVED</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val red" id="m-critical">0</div>
+      <div class="metric-label">CRITICAL</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val amber" id="m-reward">0</div>
+      <div class="metric-label">RL REWARD</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val cyan" id="m-resptime">—</div>
+      <div class="metric-label">AVG RESP (steps)</div>
+    </div>
+    <div class="metric">
+      <div class="metric-val purple" id="m-epsilon">1.00</div>
+      <div class="metric-label">EPSILON</div>
+    </div>
+  </div>
+  <div class="ep-badge">
+    <span class="live-dot"></span>
+    Ep <span id="ep-num">0</span> · ε <span id="ep-eps">1.00</span>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('city')">🗺 City Grid</button>
+  <button class="tab" onclick="switchTab('heat')">🔥 Heatmap</button>
+  <button class="tab" onclick="switchTab('reward')">📈 Reward Curve</button>
+  <button class="tab" onclick="switchTab('grader')">📊 Graders</button>
+  <button class="tab" onclick="switchTab('llm')">🤖 LLM Score</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- CANVAS AREA -->
+  <div class="canvas-wrap" id="canvasWrap">
+
+    <div class="tab-content active" id="tab-city">
+      <canvas id="grid"></canvas>
+    </div>
+
+    <div class="tab-content" id="tab-heat">
+      <canvas id="heatmap"></canvas>
+      <div class="heatmap-legend">
+        <div><span class="heatmap-swatch" style="background:rgba(239,68,68,0.8)"></span> High frequency</div>
+        <div><span class="heatmap-swatch" style="background:rgba(245,158,11,0.5)"></span> Medium</div>
+        <div><span class="heatmap-swatch" style="background:rgba(34,197,94,0.25)"></span> Low</div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-reward">
+      <canvas id="rewardCanvas"></canvas>
+    </div>
+
+    <div class="tab-content" id="tab-grader">
+      <div style="padding:16px; overflow-y:auto; height:100%;">
+        <div style="margin-bottom:12px; color:var(--cyan); font-size:10px; letter-spacing:0.1em;">PROGRAMMATIC GRADERS — EPISODE EVALUATION</div>
+
+        <div class="grader-grid" id="graderCards"></div>
+
+        <div style="margin-top:16px; margin-bottom:8px; color:var(--cyan); font-size:10px; letter-spacing:0.1em;">PER-TYPE RESOLUTION METRICS</div>
+        <div id="typeMetrics"></div>
+
+        <div style="margin-top:16px; margin-bottom:8px; color:var(--cyan); font-size:10px; letter-spacing:0.1em;">EPISODE HISTORY</div>
+        <div id="episodeHistory" style="font-size:10px; line-height:1.8; color:var(--muted);"></div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-llm">
+      <div style="padding:16px; overflow-y:auto; height:100%; display:flex; flex-direction:column; gap:12px;">
+        <div style="color:var(--cyan); font-size:10px; letter-spacing:0.1em;">LLM EPISODE EVALUATOR — RUBRIC-BASED SCORING</div>
+
+        <div style="background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:10px; font-size:10px; color:var(--muted); line-height:1.7;">
+          <div style="color:var(--text); margin-bottom:4px;">RUBRIC:</div>
+          1. Priority adherence — did high-priority incidents get resolved first?<br>
+          2. Resource efficiency — was fuel/resource usage optimal?<br>
+          3. Multi-unit coordination — were the right unit types dispatched?<br>
+          4. Response time — how quickly were incidents resolved?<br>
+          5. Exploration behavior — appropriate epsilon decay?
+        </div>
+
+        <div class="llm-score-row">
+          <span style="font-size:11px; color:var(--muted);">Latest episode score:</span>
+          <span class="score-badge" id="llmScore">—</span>
+        </div>
+
+        <div class="llm-output" id="llmOutput">Run an episode and click "Score with LLM" to get rubric-based evaluation of agent behavior...</div>
+
+        <button class="btn" onclick="scorewithLLM()" id="llmBtn" style="width:100%; padding:8px;">
+          🤖 Score Episode with LLM
+        </button>
+
+        <div style="color:var(--muted); font-size:9px; line-height:1.6;">
+          Sends episode action log to Claude API for rubric-based behavioral evaluation. Requires Anthropic API access via the artifact's fetch proxy.
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT SIDE PANEL -->
+  <div class="side">
+
+    <!-- CONTROLS -->
+    <div class="panel">
+      <div class="panel-title">Task & Control</div>
+      <select id="taskSelect" onchange="setTask(this.value)">
+        <option value="standard">Standard Response</option>
+        <option value="mass_casualty">Mass Casualty Event</option>
+        <option value="multi_fire">Multi-Fire Outbreak</option>
+        <option value="resource_scarcity">Resource Scarcity</option>
+        <option value="rush_hour">Rush Hour Gridlock</option>
+      </select>
+      <div class="btn-row">
+        <button class="btn" onclick="startRL()" id="startBtn">▶ Start</button>
+        <button class="btn" onclick="pauseSim()" id="pauseBtn">⏸ Pause</button>
+        <button class="btn danger" onclick="resetSim()">⟳ Reset</button>
+      </div>
+      <div class="slider-row">
+        <span style="color:var(--muted);font-size:10px;">Speed</span>
+        <input type="range" id="speedSlider" min="50" max="800" value="300">
+        <span style="font-size:10px; color:var(--muted);" id="speedLabel">300ms</span>
+      </div>
+    </div>
+
+    <!-- RL CONFIG -->
+    <div class="panel">
+      <div class="panel-title">RL Config</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:6px;">
+        <div>
+          <div style="font-size:9px; color:var(--muted);">Learning Rate (α)</div>
+          <input type="range" min="1" max="30" value="10" id="lrSlider" oninput="updateRL()">
+          <div style="font-size:10px;" id="lrLabel">0.10</div>
+        </div>
+        <div>
+          <div style="font-size:9px; color:var(--muted);">Discount (γ)</div>
+          <input type="range" min="50" max="99" value="90" id="gammaSlider" oninput="updateRL()">
+          <div style="font-size:10px;" id="gammaLabel">0.90</div>
+        </div>
+      </div>
+      <div style="font-size:9px; color:var(--muted); margin-bottom:3px;">Epsilon (exploration)</div>
+      <div class="epsilon-bar"><div class="epsilon-fill" id="epsilonBar" style="width:100%"></div></div>
+      <div style="display:flex; justify-content:space-between; margin-top:3px;">
+        <span style="font-size:9px; color:var(--muted);">ε = <span id="epsVal">1.00</span></span>
+        <span style="font-size:9px; color:var(--muted);">decay: 0.995/step</span>
+      </div>
+    </div>
+
+    <!-- UNITS & FUEL -->
+    <div class="panel">
+      <div class="panel-title">Units & Fuel</div>
+      <div id="unitsPanel"></div>
+    </div>
+
+    <!-- Q-VALUES -->
+    <div class="panel">
+      <div class="panel-title">RL Q-Values (Current State)</div>
+      <div id="qvalsPanel"></div>
+    </div>
+
+    <!-- ACTIVE INCIDENTS -->
+    <div class="panel">
+      <div class="panel-title">Active Incidents</div>
+      <div id="incPanel"></div>
+    </div>
+
+    <!-- EPISODE LOG -->
+    <div class="panel">
+      <div class="panel-title">Episode Log</div>
+      <div class="log-scroll" id="logPanel"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ===================================================
+// CONSTANTS & CONFIG
+// ===================================================
+const SIZE = 10;
+let CELL = 70;
+let running = false;
+let paused = false;
+let simInterval = null;
+let stepDelay = 300;
+let seed = 42;
+
+// RL Hyperparameters
+let ALPHA = 0.10;
+let GAMMA = 0.90;
+let EPSILON = 1.0;
+const EPSILON_MIN = 0.05;
+const EPSILON_DECAY = 0.995;
+
+// Q-Table: state_key -> {action -> value}
+let qTable = {};
+
+// Episode tracking
+let episode = 0;
+let totalReward = 0;
+let episodeReward = 0;
+let stepCount = 0;
+let episodeSteps = [];
+
+// Statistics
+let episodeHistory = [];
+let heatmapData = Array(SIZE).fill(null).map(() => Array(SIZE).fill(0));
+let rewardHistory = [];
+let resolvedCount = 0;
+let criticalCount = 0;
+let totalRespTimes = [];
+let actionLog = [];
+let typeMetrics = { fire: { resolved: 0, totalTime: 0 }, medical: { resolved: 0, totalTime: 0 }, police: { resolved: 0, totalTime: 0 } };
+
+// Task definitions
+const TASKS = {
+  standard: {
+    name: "Standard Response",
+    maxIncidents: 5,
+    spawnProb: 0.25,
+    priorityWeights: { high: 0.33, medium: 0.34, low: 0.33 },
+    resourceScarcity: false,
+    fuelCostMultiplier: 1
+  },
+  mass_casualty: {
+    name: "Mass Casualty Event",
+    maxIncidents: 9,
+    spawnProb: 0.6,
+    priorityWeights: { high: 0.7, medium: 0.25, low: 0.05 },
+    resourceScarcity: false,
+    fuelCostMultiplier: 1.5,
+    forcedType: "medical"
+  },
+  multi_fire: {
+    name: "Multi-Fire Outbreak",
+    maxIncidents: 8,
+    spawnProb: 0.5,
+    priorityWeights: { high: 0.6, medium: 0.3, low: 0.1 },
+    resourceScarcity: false,
+    fuelCostMultiplier: 1,
+    forcedType: "fire"
+  },
+  resource_scarcity: {
+    name: "Resource Scarcity",
+    maxIncidents: 6,
+    spawnProb: 0.3,
+    priorityWeights: { high: 0.5, medium: 0.3, low: 0.2 },
+    resourceScarcity: true,
+    fuelCostMultiplier: 3,
+    initialFuel: 40
+  },
+  rush_hour: {
+    name: "Rush Hour Gridlock",
+    maxIncidents: 7,
+    spawnProb: 0.45,
+    priorityWeights: { high: 0.4, medium: 0.4, low: 0.2 },
+    resourceScarcity: false,
+    fuelCostMultiplier: 1.2,
+    movementPenalty: true
+  }
+};
+
+let currentTask = TASKS.standard;
+
+// VEHICLES: 2 of each type (like the target image)
+let vehicles = {};
+
+function initVehicles() {
+  const task = currentTask;
+  const initFuel = task.resourceScarcity ? (task.initialFuel || 40) : 100;
+  vehicles = {
+    F1: { icon: "🚒", type: "fire",    pos: [0, 0], target: null, fuel: initFuel, status: "Idle", color: "#ef4444", id: "F1", spawnedStep: 0 },
+    F2: { icon: "🚒", type: "fire",    pos: [0, 1], target: null, fuel: initFuel, status: "Idle", color: "#ef4444", id: "F2", spawnedStep: 0 },
+    A1: { icon: "🚑", type: "medical", pos: [SIZE-1, SIZE-1], target: null, fuel: initFuel, status: "Idle", color: "#3b82f6", id: "A1", spawnedStep: 0 },
+    A2: { icon: "🚑", type: "medical", pos: [SIZE-1, SIZE-2], target: null, fuel: initFuel, status: "Idle", color: "#3b82f6", id: "A2", spawnedStep: 0 },
+    P1: { icon: "🚓", type: "police",  pos: [SIZE-1, 0], target: null, fuel: initFuel, status: "Idle", color: "#a78bfa", id: "P1", spawnedStep: 0 },
+    P2: { icon: "🚓", type: "police",  pos: [SIZE-2, 0], target: null, fuel: initFuel, status: "Idle", color: "#a78bfa", id: "P2", spawnedStep: 0 },
+  };
+}
+
+let incidents = [];
+let incidentIdCounter = 0;
+
+// ===================================================
+// SEEDED RNG
+// ===================================================
+function seededRand() {
+  seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5;
+  return (seed >>> 0) / 4294967296;
+}
+
+function randInt(n) { return Math.floor(seededRand() * n); }
+
+// ===================================================
+// Q-LEARNING CORE
+// ===================================================
+function stateKey(vehicle) {
+  // Encode: vehicle pos, target pos (if any), nearest unassigned incident
+  const vp = vehicle.pos.join(",");
+  const tp = vehicle.target ? vehicle.target.pos.join(",") : "none";
+  // Nearest incident of same type
+  const same = incidents.filter(i => i.type === vehicle.type && i !== vehicle.target);
+  const near = same.length > 0
+    ? same.reduce((a, b) =>
+        manhattan(vehicle.pos, a.pos) < manhattan(vehicle.pos, b.pos) ? a : b)
+    : null;
+  const np = near ? near.pos.join(",") + ":" + near.priority : "none";
+  return `${vp}|${tp}|${np}|${Math.floor(vehicle.fuel / 25)}`;
+}
+
+function getQ(state, action) {
+  if (!qTable[state]) qTable[state] = {};
+  return qTable[state][action] ?? 0;
+}
+
+function setQ(state, action, val) {
+  if (!qTable[state]) qTable[state] = {};
+  qTable[state][action] = val;
+}
+
+// Actions: 0=up,1=down,2=left,3=right,4=wait,5=resolve
+function chooseAction(vehicle) {
+  const state = stateKey(vehicle);
+
+  // Epsilon-greedy
+  if (seededRand() < EPSILON) {
+    return randInt(6);
+  }
+
+  // Greedy: pick highest Q
+  let bestA = 0, bestQ = -Infinity;
+  for (let a = 0; a < 6; a++) {
+    const q = getQ(state, a);
+    if (q > bestQ) { bestQ = q; bestA = a; }
+  }
+  return bestA;
+}
+
+function applyAction(vehicle, action) {
+  const [r, c] = vehicle.pos;
+  let nr = r, nc = c;
+  const movePenalty = currentTask.movementPenalty ? -0.15 : -0.05;
+
+  if (action === 0 && r > 0)        nr = r - 1;
+  else if (action === 1 && r < SIZE-1) nr = r + 1;
+  else if (action === 2 && c > 0)   nc = c - 1;
+  else if (action === 3 && c < SIZE-1) nc = c + 1;
+  else if (action === 4) return 0; // wait
+  else if (action === 5) {
+    // resolve: check if on incident of correct type
+    const inc = incidents.find(i =>
+      i.pos[0] === r && i.pos[1] === c && i.type === vehicle.type
+    );
+    if (inc) {
+      return resolveIncident(vehicle, inc);
+    }
+    return -1; // wrong location penalty
+  }
+
+  // Collision avoidance
+  const blocked = Object.values(vehicles).some(v =>
+    v !== vehicle && v.pos[0] === nr && v.pos[1] === nc
+  );
+  if (!blocked) {
+    vehicle.pos = [nr, nc];
+    const fuelCost = currentTask.fuelCostMultiplier || 1;
+    vehicle.fuel = Math.max(0, vehicle.fuel - fuelCost);
+    heatmapData[nr][nc]++;
+    return movePenalty;
+  }
+  return -0.1; // blocked penalty
+}
+
+function resolveIncident(vehicle, inc) {
+  const priorityRewards = { high: 20, medium: 10, low: 4 };
+  let reward = priorityRewards[inc.priority] || 5;
+
+  // Time-based bonus: faster resolution = bigger reward
+  const timeTaken = stepCount - inc.spawnedStep;
+  if (timeTaken < 5) reward += 5;
+  else if (timeTaken > 20) reward -= 3;
+
+  // Resource bonus
+  if (vehicle.fuel > 50) reward += 1;
+
+  incidents = incidents.filter(i => i !== inc);
+
+  // Stats
+  resolvedCount++;
+  const rtime = stepCount - inc.spawnedStep;
+  totalRespTimes.push(rtime);
+  typeMetrics[inc.type].resolved++;
+  typeMetrics[inc.type].totalTime += rtime;
+  if (inc.priority === "high") criticalCount++;
+
+  actionLog.push({
+    step: stepCount,
+    vehicle: vehicle.id,
+    action: "resolved",
+    incType: inc.type,
+    priority: inc.priority,
+    responseTime: rtime,
+    fuelUsed: (100 - vehicle.fuel)
+  });
+
+  vehicle.fuel = Math.max(0, vehicle.fuel - 5 * (currentTask.fuelCostMultiplier || 1));
+  vehicle.target = null;
+  vehicle.status = "Idle";
+
+  log(`✓ ${vehicle.id} resolved ${inc.type} (${inc.priority}) in ${rtime} steps`, "good");
+  return reward;
+}
+
+function manhattan(a, b) {
+  return Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]);
+}
+
+// ===================================================
+// REWARD SHAPING
+// ===================================================
+function shapeReward(baseReward, vehicle) {
+  let shaped = baseReward;
+
+  // Priority weighting: moving toward high-priority incident
+  const highIncs = incidents.filter(i => i.priority === "high" && i.type === vehicle.type);
+  if (highIncs.length > 0) {
+    const nearest = highIncs.reduce((a, b) =>
+      manhattan(vehicle.pos, a.pos) < manhattan(vehicle.pos, b.pos) ? a : b);
+    const d = manhattan(vehicle.pos, nearest.pos);
+    shaped += Math.max(0, (SIZE - d)) * 0.05; // proximity shaping
+  }
+
+  // Penalty for low fuel
+  if (vehicle.fuel < 20) shaped -= 0.3;
+
+  // Unresolved incident penalty (shaped)
+  shaped -= incidents.length * 0.1;
+
+  return shaped;
+}
+
+// ===================================================
+// SMART ASSIGNMENT (RL-guided)
+// ===================================================
+function assignTargets() {
+  // Sort unassigned incidents by priority score
+  const priority = { high: 3, medium: 2, low: 1 };
+  const unassigned = incidents.filter(inc => {
+    return !Object.values(vehicles).some(v => v.target === inc);
+  }).sort((a, b) => priority[b.priority] - priority[a.priority]);
+
+  for (const inc of unassigned) {
+    // Find idle vehicles of correct type, pick closest
+    const available = Object.values(vehicles).filter(v =>
+      v.type === inc.type && !v.target && v.fuel > 0
+    );
+    if (available.length > 0) {
+      const closest = available.reduce((a, b) =>
+        manhattan(a.pos, inc.pos) < manhattan(b.pos, inc.pos) ? a : b
+      );
+      closest.target = inc;
+      closest.status = `→ ${inc.priority} ${inc.type}`;
+    }
+  }
+}
+
+// ===================================================
+// VEHICLE STEP (Q-learning)
+// ===================================================
+function stepVehicle(vehicle) {
+  if (vehicle.fuel <= 0) { vehicle.status = "Out of fuel"; return; }
+
+  const prevState = stateKey(vehicle);
+  const action = chooseAction(vehicle);
+  let reward = applyAction(vehicle, action);
+  reward = shapeReward(reward, vehicle);
+
+  const nextState = stateKey(vehicle);
+
+  // Bellman update
+  const currentQ = getQ(prevState, action);
+  let maxNextQ = -Infinity;
+  for (let a = 0; a < 6; a++) {
+    const q = getQ(nextState, a);
+    if (q > maxNextQ) maxNextQ = q;
+  }
+  const newQ = currentQ + ALPHA * (reward + GAMMA * maxNextQ - currentQ);
+  setQ(prevState, action, newQ);
+
+  episodeReward += reward;
+  totalReward += reward;
+
+  // Move toward target (heuristic assist during early exploration)
+  if (vehicle.target) {
+    const [tr, tc] = vehicle.target.pos;
+    const [vr, vc] = vehicle.pos;
+    if (vr === tr && vc === tc) {
+      // Auto-resolve when on target
+      const inc = incidents.find(i => i === vehicle.target);
+      if (inc) resolveIncident(vehicle, inc);
+    }
+  }
+}
+
+// ===================================================
+// SPAWN
+// ===================================================
+function spawnIncident() {
+  if (incidents.length >= currentTask.maxIncidents) return;
+
+  const types = currentTask.forcedType
+    ? [currentTask.forcedType]
+    : ["fire", "medical", "police"];
+
+  const type = types[randInt(types.length)];
+  const pw = currentTask.priorityWeights;
+  const r = seededRand();
+  const priority = r < pw.high ? "high" : r < pw.high + pw.medium ? "medium" : "low";
+
+  const pos = [randInt(SIZE), randInt(SIZE)];
+  incidentIdCounter++;
+
+  incidents.push({
+    id: incidentIdCounter,
+    type,
+    priority,
+    pos,
+    spawnedStep: stepCount,
+    emoji: type === "fire" ? "🔥" : type === "medical" ? "🏥" : "🚔"
+  });
+
+  if (priority === "high") {
+    log(`⚠ HIGH PRIORITY ${type} at [${pos}]`, "warn");
+  }
+}
+
+// ===================================================
+// PROGRAMMATIC GRADERS
+// ===================================================
+function computeGraders() {
+  const totalSpawned = resolvedCount + incidents.length;
+
+  // G1: Episode success rate
+  const successRate = totalSpawned > 0
+    ? (resolvedCount / totalSpawned * 100).toFixed(1)
+    : "0.0";
+
+  // G2: Mean resolution time (steps)
+  const mrt = totalRespTimes.length > 0
+    ? (totalRespTimes.reduce((a, b) => a + b, 0) / totalRespTimes.length).toFixed(1)
+    : "—";
+
+  // G3: Priority-weighted clearance rate
+  // High=3x, Medium=2x, Low=1x weighted
+  const pwScore = actionLog.reduce((acc, e) => {
+    if (e.action !== "resolved") return acc;
+    const w = e.priority === "high" ? 3 : e.priority === "medium" ? 2 : 1;
+    return acc + w;
+  }, 0);
+
+  // G4: Fuel efficiency score (resolved per fuel unit spent)
+  const fuelUsed = Object.values(vehicles).reduce((acc, v) => {
+    return acc + (100 - v.fuel);
+  }, 0);
+  const fuelEff = fuelUsed > 0
+    ? (resolvedCount / fuelUsed * 100).toFixed(1)
+    : "—";
+
+  // G5: Q-table density (how many states explored)
+  const qDensity = Object.keys(qTable).length;
+
+  // G6: High-priority response time
+  const highRTs = actionLog.filter(e => e.action === "resolved" && e.priority === "high").map(e => e.responseTime);
+  const highMRT = highRTs.length > 0
+    ? (highRTs.reduce((a, b) => a + b, 0) / highRTs.length).toFixed(1)
+    : "—";
+
+  return { successRate, mrt, pwScore, fuelEff, qDensity, highMRT };
+}
+
+function renderGraders() {
+  const g = computeGraders();
+
+  document.getElementById("graderCards").innerHTML = `
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--green)">${g.successRate}%</div>
+      <div class="grader-card-label">Success Rate</div>
+    </div>
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--cyan)">${g.mrt}</div>
+      <div class="grader-card-label">Mean Resp. Time</div>
+    </div>
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--amber)">${g.pwScore}</div>
+      <div class="grader-card-label">Priority Score</div>
+    </div>
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--blue)">${g.fuelEff}%</div>
+      <div class="grader-card-label">Fuel Efficiency</div>
+    </div>
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--purple)">${g.qDensity}</div>
+      <div class="grader-card-label">States Explored</div>
+    </div>
+    <div class="grader-card">
+      <div class="grader-card-val" style="color:var(--red)">${g.highMRT}</div>
+      <div class="grader-card-label">High-Pri Resp.</div>
+    </div>
+  `;
+
+  // Per-type metrics
+  const tm = typeMetrics;
+  document.getElementById("typeMetrics").innerHTML = ["fire","medical","police"].map(t => {
+    const avg = tm[t].resolved > 0 ? (tm[t].totalTime / tm[t].resolved).toFixed(1) : "—";
+    const icon = t === "fire" ? "🔥" : t === "medical" ? "🏥" : "🚔";
+    return `<div style="display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border); font-size:10px;">
+      <span>${icon} ${t}</span>
+      <span style="color:var(--muted)">resolved: <span style="color:var(--text)">${tm[t].resolved}</span> · avg time: <span style="color:var(--cyan)">${avg}</span></span>
+    </div>`;
+  }).join("");
+
+  // Episode history table
+  const recent = episodeHistory.slice(-10).reverse();
+  document.getElementById("episodeHistory").innerHTML = recent.map(ep => {
+    const grade = ep.successRate > 80 ? "🟢" : ep.successRate > 50 ? "🟡" : "🔴";
+    return `${grade} Ep ${ep.episode} | reward: ${ep.reward.toFixed(0)} | resolved: ${ep.resolved} | ε: ${ep.epsilon.toFixed(3)}`;
+  }).join("<br>");
+}
+
+// ===================================================
+// LLM SCORING
+// ===================================================
+async function scorewithLLM() {
+  const btn = document.getElementById("llmBtn");
+  const out = document.getElementById("llmOutput");
+  btn.textContent = "⏳ Evaluating...";
+  btn.disabled = true;
+
+  if (actionLog.length === 0) {
+    out.textContent = "No episode data yet. Run the simulation first.";
+    btn.textContent = "🤖 Score Episode with LLM";
+    btn.disabled = false;
+    return;
+  }
+
+  const g = computeGraders();
+  const recentActions = actionLog.slice(-30);
+
+  const prompt = `You are an RL agent evaluator for an emergency response simulation. Evaluate the following episode and score it on a 0–100 scale using this rubric:
+
+RUBRIC (25 pts each):
+1. Priority Adherence — Were high-priority incidents resolved before low-priority ones?
+2. Resource Efficiency — Was fuel used efficiently? (Score: ${g.fuelEff}% efficiency)
+3. Unit Coordination — Were the right vehicle types dispatched to the right incidents?
+4. Response Speed — How fast were incidents resolved? (Avg: ${g.mrt} steps, High-priority avg: ${g.highMRT} steps)
+
+EPISODE STATS:
+- Task: ${currentTask.name}
+- Episode: ${episode}
+- Success rate: ${g.successRate}%
+- Total resolved: ${resolvedCount}
+- Priority-weighted score: ${g.pwScore}
+- States explored (Q-table): ${g.qDensity}
+- Epsilon at end: ${EPSILON.toFixed(3)}
+
+LAST ${recentActions.length} ACTIONS:
+${recentActions.map(a => `Step ${a.step}: ${a.vehicle} resolved ${a.incType} (${a.priority}) in ${a.responseTime} steps`).join("\n")}
+
+Provide: 
+1. A score out of 100
+2. Scores for each rubric dimension (out of 25)
+3. Specific observations about the agent's behavior
+4. One concrete suggestion to improve the reward function
+
+Format: Start with "SCORE: X/100" on line 1.`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await res.json();
+    const text = data.content?.map(c => c.text || "").join("") || "Error parsing response";
+
+    out.textContent = text;
+
+    // Extract score
+    const scoreMatch = text.match(/SCORE:\s*(\d+)/i);
+    if (scoreMatch) {
+      const score = parseInt(scoreMatch[1]);
+      const scoreEl = document.getElementById("llmScore");
+      scoreEl.textContent = `${score}/100`;
+      scoreEl.style.color = score > 70 ? "var(--green)" : score > 40 ? "var(--amber)" : "var(--red)";
+    }
+  } catch (err) {
+    out.textContent = `API error: ${err.message}\n\nNote: This requires Anthropic API access. The prompt that would be sent is shown in the LLM tab.`;
+  }
+
+  btn.textContent = "🤖 Score Episode with LLM";
+  btn.disabled = false;
+}
+
+// ===================================================
+// SIMULATION LOOP
+// ===================================================
+function simStep() {
+  stepCount++;
+
+  // Spawn with task probability
+  if (seededRand() < currentTask.spawnProb) spawnIncident();
+
+  // Assign targets
+  assignTargets();
+
+  // Step each vehicle
+  Object.values(vehicles).forEach(v => stepVehicle(v));
+
+  // Decay epsilon
+  EPSILON = Math.max(EPSILON_MIN, EPSILON * EPSILON_DECAY);
+
+  // Episode end: every 60 steps
+  if (stepCount % 60 === 0) {
+    episode++;
+    rewardHistory.push(episodeReward);
+    episodeHistory.push({
+      episode,
+      reward: episodeReward,
+      resolved: resolvedCount,
+      successRate: parseFloat(computeGraders().successRate),
+      epsilon: EPSILON
+    });
+    log(`── EP ${episode} END | reward: ${episodeReward.toFixed(0)} | ε: ${EPSILON.toFixed(3)}`, "info");
+    episodeReward = 0;
+  }
+
+  // Update UI
+  updateUI();
+  drawGrid();
+
+  if (activeTab === "heat") drawHeatmap();
+  if (activeTab === "reward") drawRewardChart();
+  if (activeTab === "grader") renderGraders();
+}
+
+// ===================================================
+// DRAWING
+// ===================================================
+const gridCanvas = document.getElementById("grid");
+const gridCtx = gridCanvas.getContext("2d");
+const heatCanvas = document.getElementById("heatmap");
+const heatCtx = heatCanvas.getContext("2d");
+const rewardCanv = document.getElementById("rewardCanvas");
+const rewardCtx = rewardCanv.getContext("2d");
+
+function resizeCanvases() {
+  const wrap = document.getElementById("canvasWrap");
+  const w = wrap.clientWidth;
+  const h = wrap.clientHeight;
+  CELL = Math.floor(Math.min(w, h) / SIZE);
+
+  gridCanvas.width = CELL * SIZE;
+  gridCanvas.height = CELL * SIZE;
+  heatCanvas.width = CELL * SIZE;
+  heatCanvas.height = CELL * SIZE;
+  rewardCanv.width = w;
+  rewardCanv.height = h;
+}
+
+function drawGrid() {
+  const ctx = gridCtx;
+  ctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+
+  // Grid lines
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      ctx.strokeStyle = "rgba(99,120,160,0.12)";
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
+    }
+  }
+
+  // HQ markers
+  ctx.fillStyle = "rgba(239,68,68,0.06)";
+  ctx.fillRect(0, 0, CELL * 2, CELL * 2);
+  ctx.fillStyle = "rgba(239,68,68,0.5)";
+  ctx.font = `${CELL * 0.18}px monospace`;
+  ctx.fillText("FIRE HQ", 4, CELL * 0.22);
+
+  ctx.fillStyle = "rgba(59,130,246,0.06)";
+  ctx.fillRect((SIZE - 2) * CELL, (SIZE - 2) * CELL, CELL * 2, CELL * 2);
+  ctx.fillStyle = "rgba(59,130,246,0.5)";
+  ctx.fillText("MED CTR", (SIZE - 2) * CELL + 2, (SIZE - 1) * CELL - 4);
+
+  ctx.fillStyle = "rgba(167,139,250,0.06)";
+  ctx.fillRect(0, (SIZE - 2) * CELL, CELL * 2, CELL * 2);
+  ctx.fillStyle = "rgba(167,139,250,0.5)";
+  ctx.fillText("POLICE HQ", 2, (SIZE - 1) * CELL - 4);
+
+  // Incidents
+  incidents.forEach(inc => {
+    const [r, c] = inc.pos;
+    const x = c * CELL + CELL / 2;
+    const y = r * CELL + CELL / 2;
+
+    const color = inc.priority === "high" ? "#ef4444"
+      : inc.priority === "medium" ? "#f59e0b" : "#22c55e";
+
+    // Pulsing ring
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.38, 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.6 + 0.3 * Math.sin(stepCount * 0.2);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Inner circle
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = color + "40";
+    ctx.fill();
+
+    // ID number
+    ctx.fillStyle = color;
+    ctx.font = `bold ${CELL * 0.22}px monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`#${inc.id}`, x, y);
+
+    // Priority indicator
+    ctx.font = `${CELL * 0.13}px monospace`;
+    ctx.fillStyle = color + "cc";
+    ctx.fillText(inc.priority.toUpperCase(), x, y + CELL * 0.32);
+    ctx.textAlign = "left";
+  });
+
+  // Vehicle path lines
+  Object.values(vehicles).forEach(v => {
+    if (!v.target) return;
+    const [vr, vc] = v.pos;
+    const [tr, tc] = v.target.pos;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = v.color + "80";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(vc * CELL + CELL / 2, vr * CELL + CELL / 2);
+    ctx.lineTo(tc * CELL + CELL / 2, tr * CELL + CELL / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Vehicles
+  Object.values(vehicles).forEach(v => {
+    const [r, c] = v.pos;
+    const x = c * CELL + CELL / 2;
+    const y = r * CELL + CELL / 2;
+
+    // Glow
+    const grd = ctx.createRadialGradient(x, y, 2, x, y, CELL * 0.4);
+    grd.addColorStop(0, v.color + "35");
+    grd.addColorStop(1, "transparent");
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Badge circle
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.28, 0, Math.PI * 2);
+    ctx.fillStyle = v.color + "30";
+    ctx.fill();
+    ctx.strokeStyle = v.color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Icon & ID
+    ctx.font = `${CELL * 0.25}px serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(v.icon, x, y - 2);
+    ctx.font = `bold ${CELL * 0.14}px monospace`;
+    ctx.fillStyle = "#fff";
+    ctx.fillText(v.id, x, y + CELL * 0.22);
+    ctx.textAlign = "left";
+
+    // Fuel ring
+    ctx.beginPath();
+    ctx.arc(x, y, CELL * 0.34, -Math.PI / 2, -Math.PI / 2 + (v.fuel / 100) * Math.PI * 2);
+    ctx.strokeStyle = v.fuel > 40 ? "#22c55e" : v.fuel > 20 ? "#f59e0b" : "#ef4444";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
+}
+
+function drawHeatmap() {
+  const ctx = heatCtx;
+  ctx.clearRect(0, 0, heatCanvas.width, heatCanvas.height);
+
+  const maxVal = Math.max(1, ...heatmapData.flat());
+
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      const val = heatmapData[r][c] / maxVal;
+      if (val < 0.05) continue;
+      const x = c * CELL, y = r * CELL;
+
+      if (val > 0.7) ctx.fillStyle = `rgba(239,68,68,${val * 0.85})`;
+      else if (val > 0.4) ctx.fillStyle = `rgba(245,158,11,${val * 0.75})`;
+      else ctx.fillStyle = `rgba(34,197,94,${val * 0.6})`;
+
+      ctx.fillRect(x + 2, y + 2, CELL - 4, CELL - 4);
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = `${CELL * 0.2}px monospace`;
+      ctx.fillText(heatmapData[r][c], x + 4, y + CELL * 0.35);
+    }
+  }
+
+  // Grid overlay
+  ctx.strokeStyle = "rgba(99,120,160,0.1)";
+  ctx.lineWidth = 0.5;
+  for (let r = 0; r < SIZE; r++) {
+    for (let c = 0; c < SIZE; c++) {
+      ctx.strokeRect(c * CELL, r * CELL, CELL, CELL);
+    }
+  }
+}
+
+function drawRewardChart() {
+  const ctx = rewardCtx;
+  const w = rewardCanv.width, h = rewardCanv.height;
+  ctx.clearRect(0, 0, w, h);
+
+  if (rewardHistory.length < 2) {
+    ctx.fillStyle = "rgba(99,120,160,0.4)";
+    ctx.font = "13px monospace";
+    ctx.textAlign = "center";
+    ctx.fillText("Run episodes to see reward curve", w / 2, h / 2);
+    return;
+  }
+
+  const pad = { top: 40, right: 40, bottom: 50, left: 70 };
+  const cw = w - pad.left - pad.right;
+  const ch = h - pad.top - pad.bottom;
+
+  const minR = Math.min(...rewardHistory);
+  const maxR = Math.max(...rewardHistory);
+  const range = maxR - minR || 1;
+
+  // Axes
+  ctx.strokeStyle = "rgba(99,120,160,0.3)";
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  ctx.moveTo(pad.left, pad.top);
+  ctx.lineTo(pad.left, pad.top + ch);
+  ctx.lineTo(pad.left + cw, pad.top + ch);
+  ctx.stroke();
+
+  // Grid lines
+  for (let i = 0; i <= 5; i++) {
+    const y = pad.top + (ch / 5) * i;
+    ctx.strokeStyle = "rgba(99,120,160,0.12)";
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(pad.left + cw, y);
+    ctx.stroke();
+    const val = maxR - (range / 5) * i;
+    ctx.fillStyle = "rgba(99,120,160,0.7)";
+    ctx.font = "10px monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(val.toFixed(0), pad.left - 6, y + 4);
+  }
+
+  // Reward line
+  const pts = rewardHistory.map((r, i) => ({
+    x: pad.left + (i / (rewardHistory.length - 1)) * cw,
+    y: pad.top + (1 - (r - minR) / range) * ch
+  }));
+
+  // Fill
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pad.top + ch);
+  pts.forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length - 1].x, pad.top + ch);
+  ctx.closePath();
+  ctx.fillStyle = "rgba(59,130,246,0.08)";
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = "#3b82f6";
+  ctx.lineWidth = 2;
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.stroke();
+
+  // Moving average (smoothed line)
+  if (rewardHistory.length >= 5) {
+    ctx.beginPath();
+    ctx.strokeStyle = "#22c55e";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    let first = true;
+    for (let i = 4; i < rewardHistory.length; i++) {
+      const avg = (rewardHistory[i] + rewardHistory[i-1] + rewardHistory[i-2] + rewardHistory[i-3] + rewardHistory[i-4]) / 5;
+      const x = pad.left + (i / (rewardHistory.length - 1)) * cw;
+      const y = pad.top + (1 - (avg - minR) / range) * ch;
+      if (first) { ctx.moveTo(x, y); first = false; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // Labels
+  ctx.fillStyle = "rgba(99,120,160,0.8)";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("Episode", pad.left + cw / 2, h - 10);
+  ctx.save();
+  ctx.translate(12, pad.top + ch / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText("Reward", 0, 0);
+  ctx.restore();
+
+  // Legend
+  ctx.fillStyle = "#3b82f6";
+  ctx.fillRect(pad.left + cw - 100, pad.top + 10, 12, 3);
+  ctx.fillStyle = "#22c55e";
+  ctx.fillRect(pad.left + cw - 100, pad.top + 22, 12, 3);
+  ctx.fillStyle = "rgba(99,120,160,0.8)";
+  ctx.font = "10px monospace";
+  ctx.textAlign = "left";
+  ctx.fillText("per episode", pad.left + cw - 84, pad.top + 14);
+  ctx.fillText("5-ep avg", pad.left + cw - 84, pad.top + 26);
+
+  ctx.textAlign = "left";
+}
+
+// ===================================================
+// UI UPDATES
+// ===================================================
+function updateUI() {
+  // Top metrics
+  document.getElementById("m-incidents").textContent = incidents.length;
+  document.getElementById("m-resolved").textContent = resolvedCount;
+  document.getElementById("m-critical").textContent = criticalCount;
+  document.getElementById("m-reward").textContent = totalReward.toFixed(0);
+  const avgRT = totalRespTimes.length > 0
+    ? (totalRespTimes.reduce((a,b) => a+b, 0) / totalRespTimes.length).toFixed(1)
+    : "—";
+  document.getElementById("m-resptime").textContent = avgRT;
+  document.getElementById("m-epsilon").textContent = EPSILON.toFixed(3);
+  document.getElementById("ep-num").textContent = episode;
+  document.getElementById("ep-eps").textContent = EPSILON.toFixed(3);
+
+  // Epsilon bar
+  document.getElementById("epsilonBar").style.width = (EPSILON * 100) + "%";
+  document.getElementById("epsVal").textContent = EPSILON.toFixed(3);
+
+  // Units panel
+  document.getElementById("unitsPanel").innerHTML = Object.values(vehicles).map(v => {
+    const fuelColor = v.fuel > 40 ? "#22c55e" : v.fuel > 20 ? "#f59e0b" : "#ef4444";
+    return `<div class="unit-row">
+      <span class="unit-icon">${v.icon}</span>
+      <div class="unit-info">
+        <div class="unit-name">${v.id} · ${v.fuel.toFixed(0)}% fuel</div>
+        <div class="unit-status">${v.status}</div>
+        <div class="fuel-bar"><div class="fuel-fill" style="width:${v.fuel}%;background:${fuelColor}"></div></div>
+      </div>
+    </div>`;
+  }).join("");
+
+  // Q-Values for first fire vehicle (F1)
+  const f1 = vehicles["F1"];
+  if (f1) {
+    const state = stateKey(f1);
+    const actions = ["↑ Move up","↓ Move down","← Move left","→ Move right","⏸ Wait","✓ Resolve"];
+    const qvals = actions.map((a, i) => ({ label: a, q: getQ(state, i) }));
+    const maxQ = Math.max(...qvals.map(x => x.q));
+    const minQ = Math.min(...qvals.map(x => x.q));
+    const range = maxQ - minQ || 1;
+
+    document.getElementById("qvalsPanel").innerHTML = qvals.map(({ label, q }) => {
+      const norm = ((q - minQ) / range * 100).toFixed(0);
+      const isBest = q === maxQ;
+      return `<div class="qval-row">
+        <div class="qval-header">
+          <span class="qval-label">${label}</span>
+          <span class="qval-num">${q.toFixed(2)}</span>
+        </div>
+        <div class="qval-bar">
+          <div class="qval-fill ${isBest ? 'best' : ''}" style="width:${norm}%"></div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+
+  // Incidents panel
+  document.getElementById("incPanel").innerHTML = incidents.length === 0
+    ? `<div style="color:var(--muted);font-size:10px;">No active incidents</div>`
+    : incidents.map(i => {
+      const waited = stepCount - i.spawnedStep;
+      return `<div class="inc-item ${i.priority}">
+        <span>${i.emoji}</span>
+        <div style="flex:1">
+          <div>#${i.id} · ${i.type}</div>
+          <div style="color:var(--muted)">waited ${waited} steps</div>
+        </div>
+        <span class="inc-pri ${i.priority}">${i.priority}</span>
+      </div>`;
+    }).join("");
+}
+
+// ===================================================
+// LOG
+// ===================================================
+function log(msg, cls = "") {
+  const panel = document.getElementById("logPanel");
+  const line = document.createElement("div");
+  line.className = "log-line " + cls;
+  line.textContent = `[${stepCount}] ${msg}`;
+  panel.insertBefore(line, panel.firstChild);
+  if (panel.children.length > 80) panel.removeChild(panel.lastChild);
+}
+
+// ===================================================
+// CONTROLS
+// ===================================================
+function setTask(val) {
+  currentTask = TASKS[val];
+  resetSim();
+  log(`Task set: ${currentTask.name}`, "info");
+}
+
+function startRL() {
+  if (running) return;
+  running = true;
+  paused = false;
+  document.getElementById("startBtn").classList.add("active");
+  simInterval = setInterval(() => {
+    if (!paused) simStep();
+  }, stepDelay);
+  log("Simulation started", "info");
+}
+
+function pauseSim() {
+  paused = !paused;
+  document.getElementById("pauseBtn").textContent = paused ? "▶ Resume" : "⏸ Pause";
+}
+
+function resetSim() {
+  clearInterval(simInterval);
+  running = false;
+  paused = false;
+  seed = 42 + episode;
+
+  incidents = [];
+  incidentIdCounter = 0;
+  stepCount = 0;
+  episodeReward = 0;
+  totalReward = 0;
+  resolvedCount = 0;
+  criticalCount = 0;
+  totalRespTimes = [];
+  actionLog = [];
+  typeMetrics = { fire: { resolved: 0, totalTime: 0 }, medical: { resolved: 0, totalTime: 0 }, police: { resolved: 0, totalTime: 0 } };
+
+  initVehicles();
+  updateUI();
+  drawGrid();
+
+  document.getElementById("startBtn").classList.remove("active");
+  document.getElementById("pauseBtn").textContent = "⏸ Pause";
+  document.getElementById("logPanel").innerHTML = "";
+  log("Reset. Q-table preserved.", "info");
+}
+
+function updateRL() {
+  ALPHA = parseFloat(document.getElementById("lrSlider").value) / 100;
+  GAMMA = parseFloat(document.getElementById("gammaSlider").value) / 100;
+  document.getElementById("lrLabel").textContent = ALPHA.toFixed(2);
+  document.getElementById("gammaLabel").textContent = GAMMA.toFixed(2);
+}
+
+document.getElementById("speedSlider").addEventListener("input", function() {
+  stepDelay = parseInt(this.value);
+  document.getElementById("speedLabel").textContent = this.value + "ms";
+  if (running) {
+    clearInterval(simInterval);
+    simInterval = setInterval(() => { if (!paused) simStep(); }, stepDelay);
+  }
+});
+
+// ===================================================
+// TABS
+// ===================================================
+let activeTab = "city";
+function switchTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll(".tab-content").forEach(el => el.classList.remove("active"));
+  document.querySelectorAll(".tab").forEach(el => el.classList.remove("active"));
+  document.getElementById("tab-" + tab).classList.add("active");
+  event.target.classList.add("active");
+
+  if (tab === "reward") drawRewardChart();
+  if (tab === "heat") drawHeatmap();
+  if (tab === "grader") renderGraders();
+}
+
+// ===================================================
+// INIT
+// ===================================================
+window.addEventListener("resize", () => {
+  resizeCanvases();
+  drawGrid();
+});
+
+resizeCanvases();
+initVehicles();
+updateUI();
+drawGrid();
+updateRL();
+log("System ready. Select task and press Start.", "info");
+log("Q-table: empty (exploring all states)", "info");
+log("Epsilon: 1.00 (full exploration)", "info");
+</script>
+</body>
+</html>

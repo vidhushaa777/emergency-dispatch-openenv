@@ -1,5 +1,12 @@
 ---
 title: Emergency Dispatch OpenEnv
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+---
+---
+title: Emergency Dispatch OpenEnv
 emoji: ??
 colorFrom: red
 colorTo: blue
@@ -211,4 +218,5 @@ emergency-dispatch-env/
 | `MODEL_NAME` | Model identifier (default: gpt-4o-mini) |
 | `HF_TOKEN` | HuggingFace token (used as fallback API key) |
 | `ENV_URL` | URL of the running environment server |
+
 

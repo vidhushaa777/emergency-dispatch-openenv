@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emergency Dispatch — RL Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap');
+
+:root {
+  --bg: #04080f;
+  --surface: #080f1a;
+  --surface2: #0d1625;
+  --border: rgba(56,189,248,0.12);
+  --border2: rgba(56,189,248,0.25);
+  --cyan: #38bdf8;
+  --green: #4ade80;
+  --amber: #fbbf24;
+  --red: #f87171;
+  --purple: #c084fc;
+  --text: #e2e8f0;
+  --muted: #64748b;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* animated grid background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(56,189,248,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56,189,248,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 24px; }
+
+/* HEADER */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--cyan);
+  letter-spacing: -0.02em;
+}
+
+.logo span { color: var(--text); }
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(74,222,128,0.08);
+  border: 1px solid rgba(74,222,128,0.25);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 11px;
+  color: var(--green);
+}
+
+.dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 1.2s infinite;
+}
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* STAT CARDS */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+
+.stat::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent, var(--cyan));
+  border-radius: 2px 2px 0 0;
+}
+
+.stat:hover { border-color: var(--border2); }
+
+.stat-val {
+  font-family: 'Syne', sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent, var(--cyan));
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* CHARTS GRID */
+.charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.charts-bottom {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.card-title {
+  font-size: 11px;
+  color: var(--cyan);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.card-title::before {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 14px;
+  background: var(--cyan);
+  border-radius: 2px;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 200px;
+}
+
+/* TASK CARDS */
+.tasks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.task-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.task-difficulty {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 10px;
+  display: inline-block;
+  margin-bottom: 10px;
+}
+
+.easy { background: rgba(74,222,128,0.12); color: var(--green); }
+.medium { background: rgba(251,191,36,0.12); color: var(--amber); }
+.hard { background: rgba(248,113,113,0.12); color: var(--red); }
+
+.task-name {
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.task-score-wrap {
+  margin-top: 12px;
+}
+
+.task-score-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.task-bar {
+  height: 4px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.task-bar-fill {
+  height: 4px;
+  border-radius: 4px;
+  transition: width 1s ease;
+}
+
+.task-desc {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-top: 8px;
+}
+
+/* HEATMAP */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.heatmap-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(56,189,248,0.05);
+  transition: background 0.5s;
+  position: relative;
+}
+
+/* LOG */
+.log-wrap {
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 10px;
+  line-height: 1.8;
+}
+
+.log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.log-line.good { color: var(--green); }
+.log-line.warn { color: var(--amber); }
+.log-line.info { color: var(--cyan); }
+.log-line.err  { color: var(--red); }
+
+::-webkit-scrollbar { width: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* BUTTONS */
+.btn-row { display: flex; gap: 10px; margin-bottom: 24px; flex-wrap: wrap; }
+
+.btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.05em;
+}
+
+.btn:hover { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.btn.active { background: var(--cyan); color: var(--bg); border-color: var(--cyan); }
+.btn.stop { border-color: rgba(248,113,113,0.4); }
+.btn.stop:hover { background: var(--red); border-color: var(--red); }
+
+/* REWARD BREAKDOWN */
+.breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.brow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.brow-label { color: var(--muted); width: 120px; flex-shrink: 0; }
+.brow-bar { flex: 1; height: 4px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; }
+.brow-fill { height: 4px; border-radius: 4px; }
+.brow-val { color: var(--text); width: 40px; text-align: right; }
+
+/* API URL input */
+.api-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.api-input {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+}
+
+.api-label { font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+/* FOOTER */
+.footer {
+  text-align: center;
+  padding: 24px 0;
+  font-size: 10px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+.footer a { color: var(--cyan); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="logo">⚡ Emergency<span>Dispatch</span> RL</div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <div style="font-size:10px;color:var(--muted);">OpenEnv · Reinforcement Learning</div>
+      <div class="live-badge"><div class="dot"></div> LIVE</div>
+    </div>
+  </div>
+
+  <!-- API URL -->
+  <div class="api-row">
+    <span class="api-label">API URL:</span>
+    <input class="api-input" id="apiUrl" value="https://vidhushaa-emergency-dispatch-env.hf.space" />
+    <button class="btn" onclick="checkHealth()">Connect</button>
+  </div>
+
+  <!-- BUTTONS -->
+  <div class="btn-row">
+    <button class="btn" onclick="startDemo('standard_dispatch')" id="btn-easy">▶ Easy Task</button>
+    <button class="btn" onclick="startDemo('mass_casualty')" id="btn-medium">▶ Medium Task</button>
+    <button class="btn" onclick="startDemo('resource_scarcity')" id="btn-hard">▶ Hard Task</button>
+    <button class="btn stop" onclick="stopDemo()">⏹ Stop</button>
+    <button class="btn" onclick="resetAll()">↺ Reset</button>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stats">
+    <div class="stat" style="--accent:var(--cyan)">
+      <div class="stat-val" id="s-step">0</div>
+      <div class="stat-label">Current Step</div>
+    </div>
+    <div class="stat" style="--accent:var(--green)">
+      <div class="stat-val" id="s-resolved">0</div>
+      <div class="stat-label">Resolved</div>
+    </div>
+    <div class="stat" style="--accent:var(--red)">
+      <div class="stat-val" id="s-active">0</div>
+      <div class="stat-label">Active Incidents</div>
+    </div>
+    <div class="stat" style="--accent:var(--amber)">
+      <div class="stat-val" id="s-reward">0.00</div>
+      <div class="stat-label">Cumulative Reward</div>
+    </div>
+    <div class="stat" style="--accent:var(--purple)">
+      <div class="stat-val" id="s-score">—</div>
+      <div class="stat-label">Grade Score</div>
+    </div>
+  </div>
+
+  <!-- MAIN CHARTS -->
+  <div class="charts">
+    <div class="card">
+      <div class="card-title">Reward Over Steps</div>
+      <div class="chart-wrap">
+        <canvas id="rewardChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Incident Resolution Rate</div>
+      <div class="chart-wrap">
+        <canvas id="resolutionChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM CHARTS -->
+  <div class="charts-bottom">
+    <div class="card">
+      <div class="card-title">Priority Breakdown</div>
+      <div class="chart-wrap" style="height:160px;">
+        <canvas id="priorityChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Unit Fuel Levels</div>
+      <div class="chart-wrap" style="height:160px;">
+        <canvas id="fuelChart"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Reward Components</div>
+      <div class="breakdown" id="rewardBreakdown">
+        <div style="color:var(--muted);font-size:10px;">Run a task to see reward breakdown</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TASK CARDS -->
+  <div class="tasks">
+    <div class="task-card">
+      <span class="task-difficulty easy">Easy</span>
+      <div class="task-name">Standard Dispatch</div>
+      <div class="task-desc">Mixed incidents, full fuel. Agent must assign correct unit types efficiently.</div>
+      <div class="task-score-wrap">
+        <div class="task-score-label">
+          <span>Grade Score</span>
+          <span id="score-easy">—</span>
+        </div>
+        <div class="task-bar"><div class="task-bar-fill" id="bar-easy" style="width:0%;background:var(--green)"></div></div>
+      </div>
+    </div>
+    <div class="task-card">
+      <span class="task-difficulty medium">Medium</span>
+      <div class="task-name">Mass Casualty Event</div>
+      <div class="task-desc">Surge of high-priority medical incidents. Triage carefully — only 2 ambulances.</div>
+      <div class="task-score-wrap">
+        <div class="task-score-label">
+          <span>Grade Score</span>
+          <span id="score-medium">—</span>
+        </div>
+        <div class="task-bar"><div class="task-bar-fill" id="bar-medium" style="width:0%;background:var(--amber)"></div></div>
+      </div>
+    </div>
+    <div class="task-card">
+      <span class="task-difficulty hard">Hard</span>
+      <div class="task-name">Resource Scarcity Crisis</div>
+      <div class="task-desc">All incident types surge. Units start at 35% fuel. Balance dispatch vs conservation.</div>
+      <div class="task-score-wrap">
+        <div class="task-score-label">
+          <span>Grade Score</span>
+          <span id="score-hard">—</span>
+        </div>
+        <div class="task-bar"><div class="task-bar-fill" id="bar-hard" style="width:0%;background:var(--red)"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HEATMAP + LOG -->
+  <div class="charts">
+    <div class="card">
+      <div class="card-title">Incident Location Heatmap</div>
+      <div class="heatmap-grid" id="heatmap"></div>
+      <div style="display:flex;gap:16px;margin-top:10px;font-size:9px;color:var(--muted);">
+        <span>🟦 Low activity</span>
+        <span>🟨 Medium</span>
+        <span>🟥 High activity</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Live Episode Log</div>
+      <div class="log-wrap" id="logWrap"></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Built by VIDHUSHAA · <a href="https://huggingface.co/spaces/VIDHUSHAA/emergency-dispatch-env" target="_blank">HuggingFace Space</a> · Emergency Dispatch OpenEnv · Reinforcement Learning
+  </div>
+
+</div>
+
+<script>
+// ── CONFIG ──
+let API = document.getElementById('apiUrl').value;
+let running = false;
+let stepTimer = null;
+let currentTask = 'standard_dispatch';
+
+// ── DATA ──
+let rewardHistory = [];
+let resolvedHistory = [];
+let stepLabels = [];
+let heatmapData = Array(100).fill(0);
+let cumReward = 0;
+let stepCount = 0;
+
+// ── CHARTS ──
+const chartDefaults = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } },
+    y: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } }
+  }
+};
+
+const rewardChart = new Chart(document.getElementById('rewardChart'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      borderColor: '#38bdf8',
+      backgroundColor: 'rgba(56,189,248,0.08)',
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+      borderWidth: 2,
+    }]
+  },
+  options: { ...chartDefaults }
+});
+
+const resolutionChart = new Chart(document.getElementById('resolutionChart'), {
+  type: 'bar',
+  data: {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: 'rgba(74,222,128,0.6)',
+      borderColor: '#4ade80',
+      borderWidth: 1,
+      borderRadius: 4,
+    }]
+  },
+  options: { ...chartDefaults }
+});
+
+const priorityChart = new Chart(document.getElementById('priorityChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['High', 'Medium', 'Low'],
+    datasets: [{
+      data: [0, 0, 0],
+      backgroundColor: ['rgba(248,113,113,0.8)', 'rgba(251,191,36,0.8)', 'rgba(74,222,128,0.8)'],
+      borderColor: ['#f87171', '#fbbf24', '#4ade80'],
+      borderWidth: 1,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: { color: '#64748b', font: { family: 'Space Mono', size: 9 }, boxWidth: 10, padding: 8 }
+      }
+    }
+  }
+});
+
+const fuelChart = new Chart(document.getElementById('fuelChart'), {
+  type: 'bar',
+  data: {
+    labels: ['F1', 'F2', 'A1', 'A2', 'P1', 'P2'],
+    datasets: [{
+      data: [100, 100, 100, 100, 100, 100],
+      backgroundColor: [
+        'rgba(248,113,113,0.7)', 'rgba(248,113,113,0.5)',
+        'rgba(56,189,248,0.7)', 'rgba(56,189,248,0.5)',
+        'rgba(192,132,252,0.7)', 'rgba(192,132,252,0.5)',
+      ],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    ...chartDefaults,
+    indexAxis: 'y',
+    scales: {
+      x: { min: 0, max: 100, ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } },
+      y: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } }
+    }
+  }
+});
+
+// ── HEATMAP INIT ──
+function initHeatmap() {
+  const grid = document.getElementById('heatmap');
+  grid.innerHTML = '';
+  heatmapData = Array(100).fill(0);
+  for (let i = 0; i < 100; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'heatmap-cell';
+    cell.id = `hc-${i}`;
+    grid.appendChild(cell);
+  }
+}
+
+function updateHeatmap(incidents) {
+  incidents.forEach(inc => {
+    const loc = inc.location;
+    const match = loc.match(/\[(\d+),(\d+)\]/);
+    if (match) {
+      const r = parseInt(match[1]);
+      const c = parseInt(match[2]);
+      const idx = r * 10 + c;
+      if (idx < 100) heatmapData[idx]++;
+    }
+  });
+  const max = Math.max(1, ...heatmapData);
+  heatmapData.forEach((v, i) => {
+    const cell = document.getElementById(`hc-${i}`);
+    if (!cell) return;
+    const intensity = v / max;
+    if (intensity > 0.6) cell.style.background = `rgba(248,113,113,${intensity * 0.9})`;
+    else if (intensity > 0.3) cell.style.background = `rgba(251,191,36,${intensity * 0.9})`;
+    else if (intensity > 0) cell.style.background = `rgba(56,189,248,${intensity * 0.9})`;
+    else cell.style.background = 'rgba(56,189,248,0.05)';
+  });
+}
+
+// ── LOG ──
+function addLog(msg, cls = '') {
+  const wrap = document.getElementById('logWrap');
+  const line = document.createElement('div');
+  line.className = `log-line ${cls}`;
+  line.textContent = `[${stepCount}] ${msg}`;
+  wrap.insertBefore(line, wrap.firstChild);
+  if (wrap.children.length > 60) wrap.removeChild(wrap.lastChild);
+}
+
+// ── API CALLS ──
+async function checkHealth() {
+  API = document.getElementById('apiUrl').value.trim();
+  try {
+    const r = await fetch(`${API}/health`);
+    const d = await r.json();
+    if (d.status === 'ok') {
+      addLog('Connected to API successfully', 'good');
+    }
+  } catch (e) {
+    addLog(`Connection failed: ${e.message}`, 'err');
+  }
+}
+
+async function resetEnv(task) {
+  API = document.getElementById('apiUrl').value.trim();
+  const r = await fetch(`${API}/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ task_name: task, seed: 42 })
+  });
+  return await r.json();
+}
+
+async function stepEnv(dispatches) {
+  const r = await fetch(`${API}/step`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dispatches })
+  });
+  return await r.json();
+}
+
+async function gradeEnv() {
+  const r = await fetch(`${API}/grade`);
+  return await r.json();
+}
+
+// ── SMART DISPATCH LOGIC ──
+function makeDispatches(obs) {
+  const dispatches = [];
+  const incidents = obs.active_incidents || [];
+  const units = obs.units || [];
+
+  // Sort incidents by priority
+  const sorted = [...incidents].sort((a, b) => {
+    const p = { high: 3, medium: 2, low: 1 };
+    return p[b.priority] - p[a.priority];
+  });
+
+  const usedUnits = new Set();
+
+  for (const inc of sorted) {
+    const available = units.filter(u =>
+      u.type === inc.type &&
+      u.status === 'idle' &&
+      u.fuel > 15 &&
+      !usedUnits.has(u.id)
+    );
+    if (available.length > 0) {
+      dispatches.push({ unit_id: available[0].id, incident_id: inc.id, reasoning: `Dispatching to ${inc.priority} ${inc.type}` });
+      usedUnits.add(available[0].id);
+    }
+  }
+  return dispatches;
+}
+
+// ── DEMO RUNNER ──
+async function startDemo(task) {
+  if (running) stopDemo();
+  running = true;
+  currentTask = task;
+
+  // Reset visuals
+  rewardHistory = []; resolvedHistory = []; stepLabels = [];
+  cumReward = 0; stepCount = 0;
+  rewardChart.data.labels = [];
+  rewardChart.data.datasets[0].data = [];
+  resolutionChart.data.labels = [];
+  resolutionChart.data.datasets[0].data = [];
+  rewardChart.update();
+  resolutionChart.update();
+  initHeatmap();
+  document.getElementById('logWrap').innerHTML = '';
+
+  // Highlight active button
+  ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
+  const map = { standard_dispatch: 'easy', mass_casualty: 'medium', resource_scarcity: 'hard' };
+  document.getElementById(`btn-${map[task]}`).classList.add('active');
+
+  addLog(`Starting task: ${task}`, 'info');
+
+  try {
+    let obs = await resetEnv(task);
+    addLog(`Environment reset. ${obs.active_incidents.length} initial incidents`, 'info');
+
+    const maxSteps = { standard_dispatch: 40, mass_casualty: 50, resource_scarcity: 60 }[task];
+    let hiRes = 0, medRes = 0, loRes = 0;
+
+    const runStep = async () => {
+      if (!running || stepCount >= maxSteps) {
+        // Grade at end
+        const grade = await gradeEnv();
+        const scoreEl = { standard_dispatch: 'score-easy', mass_casualty: 'score-medium', resource_scarcity: 'score-hard' }[task];
+        const barEl = { standard_dispatch: 'bar-easy', mass_casualty: 'bar-medium', resource_scarcity: 'bar-hard' }[task];
+        document.getElementById(scoreEl).textContent = grade.score.toFixed(3);
+        document.getElementById(barEl).style.width = (grade.score * 100) + '%';
+        document.getElementById('s-score').textContent = grade.score.toFixed(3);
+        addLog(`Episode complete! Grade: ${grade.score.toFixed(3)} | Passed: ${grade.passed}`, grade.passed ? 'good' : 'warn');
+        running = false;
+        ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
+        return;
+      }
+
+      stepCount++;
+      const dispatches = makeDispatches(obs);
+      const result = await stepEnv(dispatches);
+
+      obs = result.observation;
+      const reward = result.reward.total;
+      cumReward += reward;
+
+      // Update charts
+      stepLabels.push(stepCount);
+      rewardHistory.push(parseFloat(cumReward.toFixed(3)));
+      resolvedHistory.push(obs.resolved_count);
+
+      rewardChart.data.labels = stepLabels;
+      rewardChart.data.datasets[0].data = rewardHistory;
+      rewardChart.update('none');
+
+      resolutionChart.data.labels = stepLabels;
+      resolutionChart.data.datasets[0].data = resolvedHistory;
+      resolutionChart.update('none');
+
+      // Fuel chart
+      obs.units.forEach((u, i) => {
+        fuelChart.data.datasets[0].data[i] = parseFloat(u.fuel.toFixed(1));
+      });
+      fuelChart.update('none');
+
+      // Heatmap
+      updateHeatmap(obs.active_incidents);
+
+      // Priority chart (count from log)
+      obs.active_incidents.forEach(i => {
+        if (i.priority === 'high') hiRes++;
+        else if (i.priority === 'medium') medRes++;
+        else loRes++;
+      });
+      priorityChart.data.datasets[0].data = [hiRes, medRes, loRes];
+      priorityChart.update('none');
+
+      // Reward breakdown
+      const comp = result.reward.components;
+      const breakdownHtml = Object.entries(comp).map(([k, v]) => {
+        const pct = Math.abs(v) * 200;
+        const color = v >= 0 ? '#4ade80' : '#f87171';
+        return `<div class="brow">
+          <span class="brow-label">${k.replace(/_/g,' ')}</span>
+          <div class="brow-bar"><div class="brow-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div></div>
+          <span class="brow-val" style="color:${color}">${v > 0 ? '+' : ''}${v.toFixed(3)}</span>
+        </div>`;
+      }).join('');
+      document.getElementById('rewardBreakdown').innerHTML = breakdownHtml || '<div style="color:var(--muted);font-size:10px;">No components this step</div>';
+
+      // Stats
+      document.getElementById('s-step').textContent = stepCount;
+      document.getElementById('s-resolved').textContent = obs.resolved_count;
+      document.getElementById('s-active').textContent = obs.active_incidents.length;
+      document.getElementById('s-reward').textContent = cumReward.toFixed(2);
+
+      // Log
+      if (dispatches.length > 0) {
+        dispatches.forEach(d => addLog(`→ ${d.unit_id} dispatched to ${d.incident_id}`, 'good'));
+      }
+      if (result.reward.total < -0.05) addLog(result.reward.explanation, 'warn');
+
+      if (result.done) {
+        running = false;
+        const grade = await gradeEnv();
+        const scoreEl = { standard_dispatch: 'score-easy', mass_casualty: 'score-medium', resource_scarcity: 'score-hard' }[task];
+        const barEl = { standard_dispatch: 'bar-easy', mass_casualty: 'bar-medium', resource_scarcity: 'bar-hard' }[task];
+        document.getElementById(scoreEl).textContent = grade.score.toFixed(3);
+        document.getElementById(barEl).style.width = (grade.score * 100) + '%';
+        document.getElementById('s-score').textContent = grade.score.toFixed(3);
+        addLog(`Done! Grade: ${grade.score.toFixed(3)}`, grade.passed ? 'good' : 'warn');
+        ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
+        return;
+      }
+
+      stepTimer = setTimeout(runStep, 400);
+    };
+
+    stepTimer = setTimeout(runStep, 400);
+
+  } catch (e) {
+    addLog(`Error: ${e.message}`, 'err');
+    running = false;
+  }
+}
+
+function stopDemo() {
+  running = false;
+  clearTimeout(stepTimer);
+  ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
+  addLog('Stopped by user', 'warn');
+}
+
+function resetAll() {
+  stopDemo();
+  rewardHistory = []; resolvedHistory = []; stepLabels = [];
+  cumReward = 0; stepCount = 0;
+  rewardChart.data.labels = []; rewardChart.data.datasets[0].data = [];
+  resolutionChart.data.labels = []; resolutionChart.data.datasets[0].data = [];
+  rewardChart.update(); resolutionChart.update();
+  fuelChart.data.datasets[0].data = [100,100,100,100,100,100];
+  fuelChart.update();
+  priorityChart.data.datasets[0].data = [0,0,0];
+  priorityChart.update();
+  initHeatmap();
+  document.getElementById('logWrap').innerHTML = '';
+  document.getElementById('s-step').textContent = '0';
+  document.getElementById('s-resolved').textContent = '0';
+  document.getElementById('s-active').textContent = '0';
+  document.getElementById('s-reward').textContent = '0.00';
+  document.getElementById('s-score').textContent = '—';
+  document.getElementById('rewardBreakdown').innerHTML = '<div style="color:var(--muted);font-size:10px;">Run a task to see reward breakdown</div>';
+  addLog('Reset complete', 'info');
+}
+
+// INIT
+initHeatmap();
+addLog('Dashboard ready. Click a task button to start.', 'info');
+addLog('Connected to: ' + API, 'info');
+</script>
+</body>
+</html>

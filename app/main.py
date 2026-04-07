@@ -1,10 +1,11 @@
 """
 FastAPI server — Emergency Dispatch OpenEnv
-Endpoints: POST /reset, POST /step, GET /state, GET /grade, GET /tasks, GET /health
 """
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -19,6 +20,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,7 +28,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# One env instance per server (single-session; extend with session IDs for multi-agent)
+# ─────────────────────────────────────────────
+# STATIC FILES (VERY IMPORTANT 🔥)
+# ─────────────────────────────────────────────
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# ─────────────────────────────────────────────
+# ENV INSTANCE
+# ─────────────────────────────────────────────
 _env: Optional[EmergencyDispatchEnv] = None
 
 
@@ -117,28 +126,14 @@ def grade():
 
 
 # ─────────────────────────────────────────────
-# ROOT — simple HTML dashboard
+# ROOT — SERVE YOUR HTML UI 🔥
 # ─────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def root():
-    return """
-    <html><head><title>Emergency Dispatch OpenEnv</title>
-    <style>body{font-family:monospace;background:#060a12;color:#d4daf0;padding:40px;}
-    a{color:#3b82f6;}h1{color:#06b6d4;}code{background:#1a2035;padding:2px 6px;border-radius:3px;}
-    table{border-collapse:collapse;margin:16px 0;}td,th{padding:8px 16px;border:1px solid #1e2d45;text-align:left;}
-    </style></head><body>
-    <h1>⚡ Emergency Dispatch OpenEnv</h1>
-    <p>OpenEnv-compliant environment for training and evaluating LLM dispatch agents.</p>
-    <table>
-    <tr><th>Endpoint</th><th>Method</th><th>Description</th></tr>
-    <tr><td><a href="/docs">/docs</a></td><td>GET</td><td>Interactive API documentation</td></tr>
-    <tr><td>/health</td><td>GET</td><td>Health check</td></tr>
-    <tr><td>/tasks</td><td>GET</td><td>List all tasks</td></tr>
-    <tr><td>/reset</td><td>POST</td><td>Reset environment (body: task_name, seed)</td></tr>
-    <tr><td>/step</td><td>POST</td><td>Take a step (body: Action)</td></tr>
-    <tr><td>/state</td><td>GET</td><td>Current state snapshot</td></tr>
-    <tr><td>/grade</td><td>GET</td><td>Grade current episode (0.0–1.0)</td></tr>
-    </table>
-    <p>Tasks: <code>standard_dispatch</code> (easy) · <code>mass_casualty</code> (medium) · <code>resource_scarcity</code> (hard)</p>
-    </body></html>
-    """
+    file_path = os.path.join("app", "static", "index.html")
+
+    if not os.path.exists(file_path):
+        return HTMLResponse("<h2>index.html not found in app/static</h2>")
+
+    with open(file_path, "r", encoding="utf-8") as f:
+        return f.read()

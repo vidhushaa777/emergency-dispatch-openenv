@@ -1,0 +1,8 @@
+[project]
+name = "emergency-dispatch-openenv"
+version = "0.1.0"
+description = "OpenEnv RL environment for emergency dispatch"
+authors = [
+    { name = "Vidhushaa" }
+]
+dependencies = []

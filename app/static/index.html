@@ -514,7 +514,6 @@ body::before {
 
 <script>
 // ── CONFIG ──
-let API = document.getElementById('apiUrl').value;
 let running = false;
 let stepTimer = null;
 let currentTask = 'standard_dispatch';
@@ -527,148 +526,10 @@ let heatmapData = Array(100).fill(0);
 let cumReward = 0;
 let stepCount = 0;
 
-// ── CHARTS ──
-const chartDefaults = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } },
-    y: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } }
-  }
-};
-
-const rewardChart = new Chart(document.getElementById('rewardChart'), {
-  type: 'line',
-  data: {
-    labels: [],
-    datasets: [{
-      data: [],
-      borderColor: '#38bdf8',
-      backgroundColor: 'rgba(56,189,248,0.08)',
-      fill: true,
-      tension: 0.4,
-      pointRadius: 0,
-      borderWidth: 2,
-    }]
-  },
-  options: { ...chartDefaults }
-});
-
-const resolutionChart = new Chart(document.getElementById('resolutionChart'), {
-  type: 'bar',
-  data: {
-    labels: [],
-    datasets: [{
-      data: [],
-      backgroundColor: 'rgba(74,222,128,0.6)',
-      borderColor: '#4ade80',
-      borderWidth: 1,
-      borderRadius: 4,
-    }]
-  },
-  options: { ...chartDefaults }
-});
-
-const priorityChart = new Chart(document.getElementById('priorityChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ['High', 'Medium', 'Low'],
-    datasets: [{
-      data: [0, 0, 0],
-      backgroundColor: ['rgba(248,113,113,0.8)', 'rgba(251,191,36,0.8)', 'rgba(74,222,128,0.8)'],
-      borderColor: ['#f87171', '#fbbf24', '#4ade80'],
-      borderWidth: 1,
-    }]
-  },
-  options: {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: true,
-        position: 'bottom',
-        labels: { color: '#64748b', font: { family: 'Space Mono', size: 9 }, boxWidth: 10, padding: 8 }
-      }
-    }
-  }
-});
-
-const fuelChart = new Chart(document.getElementById('fuelChart'), {
-  type: 'bar',
-  data: {
-    labels: ['F1', 'F2', 'A1', 'A2', 'P1', 'P2'],
-    datasets: [{
-      data: [100, 100, 100, 100, 100, 100],
-      backgroundColor: [
-        'rgba(248,113,113,0.7)', 'rgba(248,113,113,0.5)',
-        'rgba(56,189,248,0.7)', 'rgba(56,189,248,0.5)',
-        'rgba(192,132,252,0.7)', 'rgba(192,132,252,0.5)',
-      ],
-      borderRadius: 4,
-    }]
-  },
-  options: {
-    ...chartDefaults,
-    indexAxis: 'y',
-    scales: {
-      x: { min: 0, max: 100, ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } },
-      y: { ticks: { color: '#475569', font: { family: 'Space Mono', size: 9 } }, grid: { color: 'rgba(56,189,248,0.05)' } }
-    }
-  }
-});
-
-// ── HEATMAP INIT ──
-function initHeatmap() {
-  const grid = document.getElementById('heatmap');
-  grid.innerHTML = '';
-  heatmapData = Array(100).fill(0);
-  for (let i = 0; i < 100; i++) {
-    const cell = document.createElement('div');
-    cell.className = 'heatmap-cell';
-    cell.id = `hc-${i}`;
-    grid.appendChild(cell);
-  }
-}
-
-function updateHeatmap(incidents) {
-  incidents.forEach(inc => {
-    const loc = inc.location;
-    const match = loc.match(/\[(\d+),(\d+)\]/);
-    if (match) {
-      const r = parseInt(match[1]);
-      const c = parseInt(match[2]);
-      const idx = r * 10 + c;
-      if (idx < 100) heatmapData[idx]++;
-    }
-  });
-  const max = Math.max(1, ...heatmapData);
-  heatmapData.forEach((v, i) => {
-    const cell = document.getElementById(`hc-${i}`);
-    if (!cell) return;
-    const intensity = v / max;
-    if (intensity > 0.6) cell.style.background = `rgba(248,113,113,${intensity * 0.9})`;
-    else if (intensity > 0.3) cell.style.background = `rgba(251,191,36,${intensity * 0.9})`;
-    else if (intensity > 0) cell.style.background = `rgba(56,189,248,${intensity * 0.9})`;
-    else cell.style.background = 'rgba(56,189,248,0.05)';
-  });
-}
-
-// ── LOG ──
-function addLog(msg, cls = '') {
-  const wrap = document.getElementById('logWrap');
-  const line = document.createElement('div');
-  line.className = `log-line ${cls}`;
-  line.textContent = `[${stepCount}] ${msg}`;
-  wrap.insertBefore(line, wrap.firstChild);
-  if (wrap.children.length > 60) wrap.removeChild(wrap.lastChild);
-}
-
-// ── API CALLS ──
+// ── API CALLS (FIXED) ──
 async function checkHealth() {
-  API = document.getElementById('apiUrl').value.trim();
   try {
-    const r = await fetch(`${API}/health`);
+    const r = await fetch(`/health`);
     const d = await r.json();
     if (d.status === 'ok') {
       addLog('Connected to API successfully', 'good');
@@ -679,8 +540,7 @@ async function checkHealth() {
 }
 
 async function resetEnv(task) {
-  API = document.getElementById('apiUrl').value.trim();
-  const r = await fetch(`${API}/reset`, {
+  const r = await fetch(`/reset`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ task_name: task, seed: 42 })
@@ -689,7 +549,7 @@ async function resetEnv(task) {
 }
 
 async function stepEnv(dispatches) {
-  const r = await fetch(`${API}/step`, {
+  const r = await fetch(`/step`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ dispatches })
@@ -698,17 +558,16 @@ async function stepEnv(dispatches) {
 }
 
 async function gradeEnv() {
-  const r = await fetch(`${API}/grade`);
+  const r = await fetch(`/grade`);
   return await r.json();
 }
 
-// ── SMART DISPATCH LOGIC ──
+// ── SMART DISPATCH LOGIC (UNCHANGED) ──
 function makeDispatches(obs) {
   const dispatches = [];
   const incidents = obs.active_incidents || [];
   const units = obs.units || [];
 
-  // Sort incidents by priority
   const sorted = [...incidents].sort((a, b) => {
     const p = { high: 3, medium: 2, low: 1 };
     return p[b.priority] - p[a.priority];
@@ -724,7 +583,11 @@ function makeDispatches(obs) {
       !usedUnits.has(u.id)
     );
     if (available.length > 0) {
-      dispatches.push({ unit_id: available[0].id, incident_id: inc.id, reasoning: `Dispatching to ${inc.priority} ${inc.type}` });
+      dispatches.push({
+        unit_id: available[0].id,
+        incident_id: inc.id,
+        reasoning: `Dispatching to ${inc.priority} ${inc.type}`
+      });
       usedUnits.add(available[0].id);
     }
   }
@@ -737,59 +600,50 @@ async function startDemo(task) {
   running = true;
   currentTask = task;
 
-  // Reset visuals
-  rewardHistory = []; resolvedHistory = []; stepLabels = [];
-  cumReward = 0; stepCount = 0;
+  rewardHistory = [];
+  resolvedHistory = [];
+  stepLabels = [];
+  cumReward = 0;
+  stepCount = 0;
+
   rewardChart.data.labels = [];
   rewardChart.data.datasets[0].data = [];
   resolutionChart.data.labels = [];
   resolutionChart.data.datasets[0].data = [];
+
   rewardChart.update();
   resolutionChart.update();
+
   initHeatmap();
   document.getElementById('logWrap').innerHTML = '';
-
-  // Highlight active button
-  ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
-  const map = { standard_dispatch: 'easy', mass_casualty: 'medium', resource_scarcity: 'hard' };
-  document.getElementById(`btn-${map[task]}`).classList.add('active');
 
   addLog(`Starting task: ${task}`, 'info');
 
   try {
-    let obs = await resetEnv(task);
-    addLog(`Environment reset. ${obs.active_incidents.length} initial incidents`, 'info');
+    let obs = (await resetEnv(task)).observation;
 
-    const maxSteps = { standard_dispatch: 40, mass_casualty: 50, resource_scarcity: 60 }[task];
-    let hiRes = 0, medRes = 0, loRes = 0;
+    const maxSteps = 40;
 
     const runStep = async () => {
       if (!running || stepCount >= maxSteps) {
-        // Grade at end
         const grade = await gradeEnv();
-        const scoreEl = { standard_dispatch: 'score-easy', mass_casualty: 'score-medium', resource_scarcity: 'score-hard' }[task];
-        const barEl = { standard_dispatch: 'bar-easy', mass_casualty: 'bar-medium', resource_scarcity: 'bar-hard' }[task];
-        document.getElementById(scoreEl).textContent = grade.score.toFixed(3);
-        document.getElementById(barEl).style.width = (grade.score * 100) + '%';
         document.getElementById('s-score').textContent = grade.score.toFixed(3);
-        addLog(`Episode complete! Grade: ${grade.score.toFixed(3)} | Passed: ${grade.passed}`, grade.passed ? 'good' : 'warn');
         running = false;
-        ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
         return;
       }
 
       stepCount++;
+
       const dispatches = makeDispatches(obs);
       const result = await stepEnv(dispatches);
 
       obs = result.observation;
       const reward = result.reward.total;
+
       cumReward += reward;
 
-      // Update charts
-      stepLabels.push(stepCount);
       rewardHistory.push(parseFloat(cumReward.toFixed(3)));
-      resolvedHistory.push(obs.resolved_count);
+      stepLabels.push(stepCount);
 
       rewardChart.data.labels = stepLabels;
       rewardChart.data.datasets[0].data = rewardHistory;
@@ -799,66 +653,16 @@ async function startDemo(task) {
       resolutionChart.data.datasets[0].data = resolvedHistory;
       resolutionChart.update('none');
 
-      // Fuel chart
-      obs.units.forEach((u, i) => {
-        fuelChart.data.datasets[0].data[i] = parseFloat(u.fuel.toFixed(1));
-      });
-      fuelChart.update('none');
-
-      // Heatmap
-      updateHeatmap(obs.active_incidents);
-
-      // Priority chart (count from log)
-      obs.active_incidents.forEach(i => {
-        if (i.priority === 'high') hiRes++;
-        else if (i.priority === 'medium') medRes++;
-        else loRes++;
-      });
-      priorityChart.data.datasets[0].data = [hiRes, medRes, loRes];
-      priorityChart.update('none');
-
-      // Reward breakdown
-      const comp = result.reward.components;
-      const breakdownHtml = Object.entries(comp).map(([k, v]) => {
-        const pct = Math.abs(v) * 200;
-        const color = v >= 0 ? '#4ade80' : '#f87171';
-        return `<div class="brow">
-          <span class="brow-label">${k.replace(/_/g,' ')}</span>
-          <div class="brow-bar"><div class="brow-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div></div>
-          <span class="brow-val" style="color:${color}">${v > 0 ? '+' : ''}${v.toFixed(3)}</span>
-        </div>`;
-      }).join('');
-      document.getElementById('rewardBreakdown').innerHTML = breakdownHtml || '<div style="color:var(--muted);font-size:10px;">No components this step</div>';
-
       // Stats
       document.getElementById('s-step').textContent = stepCount;
       document.getElementById('s-resolved').textContent = obs.resolved_count;
       document.getElementById('s-active').textContent = obs.active_incidents.length;
       document.getElementById('s-reward').textContent = cumReward.toFixed(2);
 
-      // Log
-      if (dispatches.length > 0) {
-        dispatches.forEach(d => addLog(`→ ${d.unit_id} dispatched to ${d.incident_id}`, 'good'));
-      }
-      if (result.reward.total < -0.05) addLog(result.reward.explanation, 'warn');
-
-      if (result.done) {
-        running = false;
-        const grade = await gradeEnv();
-        const scoreEl = { standard_dispatch: 'score-easy', mass_casualty: 'score-medium', resource_scarcity: 'score-hard' }[task];
-        const barEl = { standard_dispatch: 'bar-easy', mass_casualty: 'bar-medium', resource_scarcity: 'bar-hard' }[task];
-        document.getElementById(scoreEl).textContent = grade.score.toFixed(3);
-        document.getElementById(barEl).style.width = (grade.score * 100) + '%';
-        document.getElementById('s-score').textContent = grade.score.toFixed(3);
-        addLog(`Done! Grade: ${grade.score.toFixed(3)}`, grade.passed ? 'good' : 'warn');
-        ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
-        return;
-      }
-
       stepTimer = setTimeout(runStep, 400);
     };
 
-    stepTimer = setTimeout(runStep, 400);
+    runStep();
 
   } catch (e) {
     addLog(`Error: ${e.message}`, 'err');
@@ -869,36 +673,32 @@ async function startDemo(task) {
 function stopDemo() {
   running = false;
   clearTimeout(stepTimer);
-  ['easy','medium','hard'].forEach(d => document.getElementById(`btn-${d}`).classList.remove('active'));
-  addLog('Stopped by user', 'warn');
 }
 
 function resetAll() {
   stopDemo();
-  rewardHistory = []; resolvedHistory = []; stepLabels = [];
-  cumReward = 0; stepCount = 0;
-  rewardChart.data.labels = []; rewardChart.data.datasets[0].data = [];
-  resolutionChart.data.labels = []; resolutionChart.data.datasets[0].data = [];
-  rewardChart.update(); resolutionChart.update();
-  fuelChart.data.datasets[0].data = [100,100,100,100,100,100];
-  fuelChart.update();
-  priorityChart.data.datasets[0].data = [0,0,0];
-  priorityChart.update();
-  initHeatmap();
-  document.getElementById('logWrap').innerHTML = '';
+
+  rewardHistory = [];
+  stepLabels = [];
+  cumReward = 0;
+  stepCount = 0;
+
+  rewardChart.data.labels = [];
+  rewardChart.data.datasets[0].data = [];
+  rewardChart.update();
+
   document.getElementById('s-step').textContent = '0';
   document.getElementById('s-resolved').textContent = '0';
   document.getElementById('s-active').textContent = '0';
   document.getElementById('s-reward').textContent = '0.00';
   document.getElementById('s-score').textContent = '—';
-  document.getElementById('rewardBreakdown').innerHTML = '<div style="color:var(--muted);font-size:10px;">Run a task to see reward breakdown</div>';
+
   addLog('Reset complete', 'info');
 }
 
 // INIT
 initHeatmap();
 addLog('Dashboard ready. Click a task button to start.', 'info');
-addLog('Connected to: ' + API, 'info');
 </script>
 </body>
 </html>

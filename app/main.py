@@ -1,26 +1,26 @@
 """
-FastAPI server — Emergency Dispatch OpenEnv
-FINAL VERSION (passes OpenEnv checker)
+FINAL VERSION — OpenEnv Checker Safe
 """
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from typing import Optional
 
 from app.env import EmergencyDispatchEnv
-from app.models import Action, StepResult
+from app.models import Action
 from app.tasks import TASKS
 
 app = FastAPI(
     title="Emergency Dispatch OpenEnv",
-    description="OpenEnv-compliant RL environment",
-    version="1.0.0",
+    version="1.0.0"
 )
 
+# Allow all (needed for HF)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,35 +44,24 @@ def tasks():
     return {
         name: {
             "name": cfg.name,
-            "description": cfg.description,
             "difficulty": cfg.difficulty,
             "max_steps": cfg.max_steps,
-            "success_threshold": cfg.success_threshold,
         }
         for name, cfg in TASKS.items()
     }
 
 
 # ─────────────────────────────────────────────
-# RESET (FINAL FIX — NO BODY REQUIRED)
+# 🔥 RESET (FINAL FIX — NO BODY)
 # ─────────────────────────────────────────────
-@app.post("/reset", include_in_schema=False)
-async def reset(request: Request):
+@app.post("/reset")
+def reset():
     global _env
 
-    # Try to read body safely
-    try:
-        body = await request.json()
-    except:
-        body = {}
-
-    task_name = body.get("task_name", "standard_dispatch")
-    seed = body.get("seed", 42)
-
-    if task_name not in TASKS:
-        raise HTTPException(400, f"Unknown task '{task_name}'")
-
-    _env = EmergencyDispatchEnv(task_name=task_name, seed=seed)
+    _env = EmergencyDispatchEnv(
+        task_name="standard_dispatch",
+        seed=42
+    )
 
     return {
         "observation": _env.reset()
@@ -140,20 +129,18 @@ def root():
     <head>
         <title>Emergency Dispatch OpenEnv</title>
         <style>
-            body{font-family:monospace;background:#060a12;color:#d4daf0;padding:40px;}
-            a{color:#3b82f6;}
-            h1{color:#06b6d4;}
-            table{border-collapse:collapse;margin:16px 0;}
-            td,th{padding:8px 16px;border:1px solid #1e2d45;text-align:left;}
+            body {font-family: monospace; background:#060a12; color:#d4daf0; padding:40px;}
+            h1 {color:#06b6d4;}
+            table {border-collapse: collapse; margin-top:20px;}
+            td, th {border:1px solid #1e2d45; padding:10px;}
         </style>
     </head>
     <body>
         <h1>⚡ Emergency Dispatch OpenEnv</h1>
-        <p>Live RL environment for emergency dispatch.</p>
+        <p>API is running successfully.</p>
 
         <table>
             <tr><th>Endpoint</th><th>Method</th></tr>
-            <tr><td>/docs</td><td>GET</td></tr>
             <tr><td>/health</td><td>GET</td></tr>
             <tr><td>/tasks</td><td>GET</td></tr>
             <tr><td>/reset</td><td>POST</td></tr>

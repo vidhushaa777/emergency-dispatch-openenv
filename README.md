@@ -130,7 +130,10 @@ A built-in dashboard is served via FastAPI:
 * Reward visualization
 * API interaction
 
-👉 Access:
+👉 Access (Live Demo):  
+https://huggingface.co/spaces/VIDHUSHAA/emergency-dispatch-env
+
+👉 Local (for development):  
 http://localhost:8000/
 
 ---

@@ -3,6 +3,14 @@ name = "emergency-dispatch-openenv"
 version = "0.1.0"
 description = "OpenEnv RL environment for emergency dispatch"
 authors = [
-    { name = "Vidhushaa" }
+  { name = "Vidhushaa" }
 ]
-dependencies = []
+
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "openenv>=0.1.13"
+]
+
+[project.scripts]
+server = "app.main:app"

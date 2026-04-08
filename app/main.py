@@ -1,10 +1,6 @@
-"""
-FINAL VERSION — OpenEnv Checker Safe
-"""
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
 from typing import Optional
 
 from app.env import EmergencyDispatchEnv
@@ -16,7 +12,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Allow all (needed for HF)
+# CORS (important for UI)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,6 +22,14 @@ app.add_middleware(
 )
 
 _env: Optional[EmergencyDispatchEnv] = None
+
+
+# ─────────────────────────────────────────────
+# ROOT (UI — SAFE CHANGE)
+# ─────────────────────────────────────────────
+@app.get("/")
+def root():
+    return FileResponse("app/static/index.html")
 
 
 # ─────────────────────────────────────────────
@@ -52,7 +56,7 @@ def tasks():
 
 
 # ─────────────────────────────────────────────
-# 🔥 RESET (FINAL FIX — NO BODY)
+# RESET (CRITICAL — DO NOT CHANGE)
 # ─────────────────────────────────────────────
 @app.post("/reset")
 def reset():
@@ -117,37 +121,3 @@ def grade():
         "score": score,
         "breakdown": breakdown,
     }
-
-
-# ─────────────────────────────────────────────
-# ROOT UI
-# ─────────────────────────────────────────────
-@app.get("/", response_class=HTMLResponse)
-def root():
-    return """
-    <html>
-    <head>
-        <title>Emergency Dispatch OpenEnv</title>
-        <style>
-            body {font-family: monospace; background:#060a12; color:#d4daf0; padding:40px;}
-            h1 {color:#06b6d4;}
-            table {border-collapse: collapse; margin-top:20px;}
-            td, th {border:1px solid #1e2d45; padding:10px;}
-        </style>
-    </head>
-    <body>
-        <h1>⚡ Emergency Dispatch OpenEnv</h1>
-        <p>API is running successfully.</p>
-
-        <table>
-            <tr><th>Endpoint</th><th>Method</th></tr>
-            <tr><td>/health</td><td>GET</td></tr>
-            <tr><td>/tasks</td><td>GET</td></tr>
-            <tr><td>/reset</td><td>POST</td></tr>
-            <tr><td>/step</td><td>POST</td></tr>
-            <tr><td>/state</td><td>GET</td></tr>
-            <tr><td>/grade</td><td>GET</td></tr>
-        </table>
-    </body>
-    </html>
-    """

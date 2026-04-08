@@ -1,6 +1,6 @@
 """
 FastAPI server — Emergency Dispatch OpenEnv
-Fully compatible with OpenEnv checker
+FINAL VERSION (passes OpenEnv checker)
 """
 
 from fastapi import FastAPI, HTTPException, Request
@@ -9,12 +9,12 @@ from fastapi.responses import HTMLResponse
 from typing import Optional
 
 from app.env import EmergencyDispatchEnv
-from app.models import Action, StepResult, Observation
+from app.models import Action, StepResult
 from app.tasks import TASKS
 
 app = FastAPI(
     title="Emergency Dispatch OpenEnv",
-    description="OpenEnv-compliant RL environment for emergency dispatch coordination.",
+    description="OpenEnv-compliant RL environment",
     version="1.0.0",
 )
 
@@ -25,7 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Global env
 _env: Optional[EmergencyDispatchEnv] = None
 
 
@@ -41,7 +40,7 @@ def health():
 # TASKS
 # ─────────────────────────────────────────────
 @app.get("/tasks")
-def list_tasks():
+def tasks():
     return {
         name: {
             "name": cfg.name,
@@ -55,13 +54,13 @@ def list_tasks():
 
 
 # ─────────────────────────────────────────────
-# RESET (FINAL FIX ✅)
+# RESET (FINAL FIX — NO BODY REQUIRED)
 # ─────────────────────────────────────────────
-@app.post("/reset")
+@app.post("/reset", include_in_schema=False)
 async def reset(request: Request):
     global _env
 
-    # Try reading body safely
+    # Try to read body safely
     try:
         body = await request.json()
     except:
@@ -132,7 +131,7 @@ def grade():
 
 
 # ─────────────────────────────────────────────
-# ROOT (Dashboard)
+# ROOT UI
 # ─────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 def root():

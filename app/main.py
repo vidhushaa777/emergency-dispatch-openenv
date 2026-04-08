@@ -1,16 +1,14 @@
 """
 app/main.py — Emergency Dispatch OpenEnv Server
-FastAPI server exposing /reset, /step, /grade endpoints.
 """
 import random
 import time
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from typing import List, Optional
 
 app = FastAPI(title="Emergency Dispatch OpenEnv")
 
-# ── State ────────────────────────────────────────────────────────────────────
 state = {
     "task_name": None,
     "seed": 42,
@@ -19,6 +17,7 @@ state = {
     "active_incidents": [],
     "units": [],
     "scores": [],
+    "max_steps": 20,
 }
 
 UNIT_TYPES = ["ambulance", "fire_truck", "police"]
@@ -66,13 +65,6 @@ def get_obs():
     }
 
 
-# ── Endpoints ────────────────────────────────────────────────────────────────
-
-class ResetRequest(BaseModel):
-    task_name: str = "standard_dispatch"
-    seed: int = 42
-
-
 class Dispatch(BaseModel):
     unit_id: str
     incident_id: str
@@ -80,7 +72,7 @@ class Dispatch(BaseModel):
 
 
 class StepRequest(BaseModel):
-    dispatches: List[Dispatch] = []
+    dispatches: Optional[List[Dispatch]] = []
 
 
 @app.get("/health")
@@ -88,14 +80,28 @@ def health():
     return {"status": "ok", "timestamp": time.time()}
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "Emergency Dispatch OpenEnv"}
+
+
 @app.post("/reset")
-def reset(req: ResetRequest):
-    rng = random.Random(req.seed)
-    cfg = TASKS.get(req.task_name, TASKS["standard_dispatch"])
+async def reset(request: Request):
+    # Accept empty body OR json body
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    task_name = body.get("task_name", "standard_dispatch") if body else "standard_dispatch"
+    seed = body.get("seed", 42) if body else 42
+
+    rng = random.Random(seed)
+    cfg = TASKS.get(task_name, TASKS["standard_dispatch"])
 
     state.update({
-        "task_name": req.task_name,
-        "seed": req.seed,
+        "task_name": task_name,
+        "seed": seed,
         "step_count": 0,
         "resolved": [],
         "active_incidents": make_incidents(cfg["num_incidents"], rng),
@@ -107,7 +113,14 @@ def reset(req: ResetRequest):
 
 
 @app.post("/step")
-def step(req: StepRequest):
+async def step(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    dispatches = body.get("dispatches", []) if body else []
+
     state["step_count"] += 1
     reward = 0.0
     priority_reward = {"high": 1.0, "medium": 0.5, "low": 0.2}
@@ -115,9 +128,11 @@ def step(req: StepRequest):
     unit_map = {u["id"]: u for u in state["units"]}
     inc_map  = {i["id"]: i for i in state["active_incidents"]}
 
-    for d in req.dispatches:
-        unit = unit_map.get(d.unit_id)
-        inc  = inc_map.get(d.incident_id)
+    for d in dispatches:
+        unit_id = d.get("unit_id") if isinstance(d, dict) else d.unit_id
+        inc_id  = d.get("incident_id") if isinstance(d, dict) else d.incident_id
+        unit = unit_map.get(unit_id)
+        inc  = inc_map.get(inc_id)
         if unit and inc and not inc["resolved"]:
             if unit["type"] == inc["type"] and unit["status"] == "idle" and unit["fuel"] > 10:
                 inc["resolved"] = True
@@ -126,9 +141,8 @@ def step(req: StepRequest):
                 unit["fuel"] = max(0, unit["fuel"] - 10)
                 reward += priority_reward.get(inc["priority"], 0.2)
             else:
-                reward -= 0.1  # wrong unit type or unavailable
+                reward -= 0.1
 
-    # free busy units each step
     for u in state["units"]:
         if u["status"] == "busy":
             u["status"] = "idle"

@@ -6,7 +6,7 @@ colorFrom: red
 colorTo: blue
 sdk: docker
 pinned: false
--------------
+---
 
 # 🚑 Emergency Dispatch OpenEnv
 

@@ -57,6 +57,10 @@ def main():
     api_key      = os.environ["API_KEY"]
     api_base_url = os.environ["API_BASE_URL"]
 
+    # Ensure /v1 suffix for OpenAI client compatibility
+    if not api_base_url.rstrip("/").endswith("/v1"):
+        api_base_url = api_base_url.rstrip("/") + "/v1"
+
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
 
     # Initialize OpenAI client with injected base_url and api_key
@@ -64,7 +68,6 @@ def main():
         api_key=api_key,
         base_url=api_base_url,
     )
-
     for task in TASKS:
         print(f"[START] task={task}", flush=True)
         score, steps = 0.0, 0
@@ -74,7 +77,6 @@ def main():
             print(f"[STEP] step=0 reward=0.0", flush=True)
             print(f"TASK ERROR: {e}", file=sys.stderr, flush=True)
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
-
     sys.exit(0)
 
 if __name__ == "__main__":

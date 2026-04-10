@@ -10,15 +10,24 @@ Respond ONLY with valid JSON: {"dispatches": [{"unit_id": "F1", "incident_id": "
 If no action needed: {"dispatches": []}"""
 
 def call_llm(api_key, api_base_url, messages):
-    """Call LiteLLM proxy directly via HTTP — no OpenAI library needed."""
-    url = api_base_url.rstrip("/") + "/chat/completions"
+    # Handle both "https://proxy.com" and "https://proxy.com/v1"
+    base = api_base_url.rstrip("/")
+    if not base.endswith("/v1"):
+        base = base + "/v1"
+    url = base + "/chat/completions"
+
     resp = requests.post(
         url,
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        json={"model": MODEL_NAME, "messages": messages, "temperature": 0.2, "max_tokens": 512},
+        json={
+            "model": MODEL_NAME,
+            "messages": messages,
+            "temperature": 0.2,
+            "max_tokens": 512,
+        },
         timeout=60,
     )
     resp.raise_for_status()
@@ -32,8 +41,8 @@ def get_action(api_key, api_base_url, obs):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
+    raw = call_llm(api_key, api_base_url, messages)
     try:
-        raw = call_llm(api_key, api_base_url, messages)
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"): raw = raw[4:]
@@ -66,13 +75,15 @@ def main():
         score, steps = 0.0, 0
         try:
             score, steps = run_task(api_key, api_base_url, task)
-        except Exception:
+        except Exception as e:
             print(f"[STEP] step=0 reward=0.0", flush=True)
+            print(f"ERROR: {e}", file=sys.stderr)
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
     sys.exit(0)
 
 if __name__ == "__main__":
     main()
+
 
 
 

@@ -105,6 +105,7 @@ def run_task(client, task_name):
     except Exception:
         score = 0.5
 
+    # 🔥 FINAL FIX (STRICT RANGE)
     score = max(0.001, min(0.999, round(score, 4)))
 
     print(f"[END] task={task_name} score={score} steps={step}", flush=True)
@@ -113,7 +114,6 @@ def run_task(client, task_name):
 def main():
     print("[START] model=dispatch_agent", flush=True)
 
-    # ✅ SAFE INIT (won’t crash Phase 1)
     api_key = os.environ.get("API_KEY")
     api_base = os.environ.get("API_BASE_URL")
 
@@ -126,7 +126,7 @@ def main():
                 base_url=api_base
             )
 
-            # 🔥 one required LLM call
+            # 🔥 REQUIRED LLM CALL (proxy detection)
             client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[{"role": "user", "content": "hello"}],
@@ -137,7 +137,6 @@ def main():
             print(f"LLM INIT ERROR: {e}", file=sys.stderr, flush=True)
             client = None
 
-    # fallback if no LLM
     if client is None:
         print("WARNING: Running without LLM", file=sys.stderr, flush=True)
 

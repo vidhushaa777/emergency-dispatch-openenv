@@ -196,16 +196,11 @@ def main():
     start_time = time.time()
     results = {}
 
-    # ── [START] log ──
     for task_name in TASKS:
         print(f"[START] task={task_name}", flush=True)
-    sys.stdout.flush()
-
-    for task_name in TASKS:
         try:
             result = run_task(task_name)
             results[task_name] = result
-            # ── [END] log per task ──
             print(f"[END] task={task_name} score={result['grade_score']} steps={result['steps']}", flush=True)
         except Exception as e:
             results[task_name] = {

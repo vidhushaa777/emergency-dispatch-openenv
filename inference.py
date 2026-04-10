@@ -10,12 +10,8 @@ Respond ONLY with valid JSON: {"dispatches": [{"unit_id": "F1", "incident_id": "
 If no action needed: {"dispatches": []}"""
 
 def call_llm(api_key, api_base_url, messages):
-    # Handle both "https://proxy.com" and "https://proxy.com/v1"
-    base = api_base_url.rstrip("/")
-    if not base.endswith("/v1"):
-        base = base + "/v1"
-    url = base + "/chat/completions"
-
+    # Use URL exactly as injected — no modification
+    url = api_base_url.rstrip("/") + "/chat/completions"
     resp = requests.post(
         url,
         headers={
@@ -41,13 +37,14 @@ def get_action(api_key, api_base_url, obs):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
-    raw = call_llm(api_key, api_base_url, messages)
     try:
+        raw = call_llm(api_key, api_base_url, messages)
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"): raw = raw[4:]
         return json.loads(raw.strip())
-    except Exception:
+    except Exception as e:
+        print(f"LLM ERROR: {e}", file=sys.stderr, flush=True)
         return {"dispatches": []}
 
 def run_task(api_key, api_base_url, task_name):
@@ -69,6 +66,7 @@ def run_task(api_key, api_base_url, task_name):
 def main():
     api_key      = os.environ["API_KEY"]
     api_base_url = os.environ["API_BASE_URL"]
+    print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
 
     for task in TASKS:
         print(f"[START] task={task}", flush=True)
@@ -77,13 +75,12 @@ def main():
             score, steps = run_task(api_key, api_base_url, task)
         except Exception as e:
             print(f"[STEP] step=0 reward=0.0", flush=True)
-            print(f"ERROR: {e}", file=sys.stderr)
+            print(f"TASK ERROR: {e}", file=sys.stderr, flush=True)
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
     sys.exit(0)
 
 if __name__ == "__main__":
     main()
-
 
 
 

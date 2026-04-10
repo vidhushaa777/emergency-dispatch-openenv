@@ -11,12 +11,14 @@ Respond ONLY with valid JSON: {"dispatches": [{"unit_id": "F1", "incident_id": "
 If no action needed: {"dispatches": []}"""
 
 def call_llm(client, messages):
+    print(f"DEBUG calling LLM model={MODEL_NAME}", file=sys.stderr, flush=True)
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         temperature=0.2,
         max_tokens=512,
     )
+    print(f"DEBUG LLM response received", file=sys.stderr, flush=True)
     return response.choices[0].message.content
 
 def get_action(client, obs):
@@ -34,7 +36,7 @@ def get_action(client, obs):
             if raw.startswith("json"): raw = raw[4:]
         return json.loads(raw.strip())
     except Exception as e:
-        print(f"LLM ERROR: {e}", file=sys.stderr, flush=True)
+        print(f"LLM ERROR (full): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         return {"dispatches": []}
 
 def run_task(client, task_name):
@@ -57,17 +59,17 @@ def main():
     api_key      = os.environ["API_KEY"]
     api_base_url = os.environ["API_BASE_URL"]
 
-    # Ensure /v1 suffix for OpenAI client compatibility
     if not api_base_url.rstrip("/").endswith("/v1"):
         api_base_url = api_base_url.rstrip("/") + "/v1"
 
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
+    print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
 
-    # Initialize OpenAI client with injected base_url and api_key
     client = OpenAI(
         api_key=api_key,
         base_url=api_base_url,
     )
+
     for task in TASKS:
         print(f"[START] task={task}", flush=True)
         score, steps = 0.0, 0
@@ -75,13 +77,10 @@ def main():
             score, steps = run_task(client, task)
         except Exception as e:
             print(f"[STEP] step=0 reward=0.0", flush=True)
-            print(f"TASK ERROR: {e}", file=sys.stderr, flush=True)
+            print(f"TASK ERROR: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
+
     sys.exit(0)
 
 if __name__ == "__main__":
     main()
-
-
-
-

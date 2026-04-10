@@ -1,166 +1,228 @@
 """
-inference.py — Emergency Dispatch OpenEnv
-Correct [START][STEP][END] log format.
+inference.py — Baseline LLM agent for Emergency Dispatch OpenEnv
+Uses OpenAI client. Emits [START], [STEP], [END] structured logs.
+Run: python inference.py
 """
 import os
+import json
 import sys
 import time
 import requests
+from openai import OpenAI
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:7860")
-MODEL_NAME   = os.getenv("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN     = os.getenv("HF_TOKEN", "")
-ENV_URL      = os.getenv("ENV_URL", API_BASE_URL)
-SEED         = 42
+# ─────────────────────────────────────────────
+# CONFIG — read from environment variables
+# ─────────────────────────────────────────────
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+HF_TOKEN     = os.environ.get("HF_TOKEN", "")
+OPENAI_KEY   = os.environ.get("OPENAI_API_KEY", HF_TOKEN)
+
+ENV_URL      = os.environ.get("ENV_URL", "http://localhost:8000")
 TASKS        = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
+SEED         = 42
 
-# ── Print [START] immediately so validator always sees it ──────────────────────
-print(f"[START] model={MODEL_NAME} tasks={','.join(TASKS)} seed={SEED} env_url={ENV_URL}", flush=True)
+client = OpenAI(
+    api_key=OPENAI_KEY,
+    base_url=API_BASE_URL if "openai" not in API_BASE_URL else None,
+)
 
 
-def env_reset(task_name):
-    r = requests.post(f"{ENV_URL}/reset",
-                      json={"task_name": task_name, "seed": SEED},
-                      timeout=30)
+# ─────────────────────────────────────────────
+# ENV CLIENT
+# ─────────────────────────────────────────────
+def env_reset(task_name: str, seed: int = SEED) -> dict:
+    r = requests.post(f"{ENV_URL}/reset", json={"task_name": task_name, "seed": seed})
+    r.raise_for_status()
+    return r.json()
+
+def env_step(action: dict) -> dict:
+    r = requests.post(f"{ENV_URL}/step", json=action)
+    r.raise_for_status()
+    return r.json()
+
+def env_grade() -> dict:
+    r = requests.get(f"{ENV_URL}/grade")
     r.raise_for_status()
     return r.json()
 
 
-def env_step(action):
-    r = requests.post(f"{ENV_URL}/step", json=action, timeout=30)
-    r.raise_for_status()
-    return r.json()
+# ─────────────────────────────────────────────
+# PROMPT BUILDER
+# ─────────────────────────────────────────────
+SYSTEM_PROMPT = """You are an emergency dispatch coordinator AI.
+Each step you receive a JSON observation containing:
+- active_incidents: list of incidents needing response (type, priority, location, description)
+- units: list of vehicles with their status, fuel level, and type
 
+Your job: decide which units to dispatch to which incidents.
 
-def env_grade():
-    r = requests.get(f"{ENV_URL}/grade", timeout=30)
-    r.raise_for_status()
-    return r.json()
+Rules:
+1. Only dispatch the CORRECT unit type (fire→fire, medical→medical, police→police)
+2. Prioritize HIGH priority incidents before MEDIUM or LOW
+3. Don't dispatch units with fuel < 10
+4. Don't assign already-responding units
 
+Respond ONLY with valid JSON matching this schema:
+{
+  "dispatches": [
+    {
+      "unit_id": "F1",
+      "incident_id": "F001",
+      "reasoning": "High priority fire, F1 is idle and closest"
+    }
+  ]
+}
 
-def clamp_score(score):
-    """Ensure score is strictly between 0 and 1 (not 0.0 and not 1.0)."""
-    return round(min(0.999, max(0.001, float(score))), 4)
+If no action is needed, respond with: {"dispatches": []}
+"""
 
-
-def choose_action(obs):
+def build_user_prompt(obs: dict) -> str:
     incidents = obs.get("active_incidents", [])
     units     = obs.get("units", [])
-    priority_map = {"high": 3, "medium": 2, "low": 1}
-    sorted_inc = sorted(incidents,
-                        key=lambda x: priority_map.get(x["priority"], 0),
-                        reverse=True)
-    dispatches = []
-    used_units = set()
-    for inc in sorted_inc:
-        for unit in units:
-            if (unit["type"] == inc["type"]
-                    and unit["status"] == "idle"
-                    and unit["fuel"] > 10
-                    and unit["id"] not in used_units):
-                dispatches.append({
-                    "unit_id": unit["id"],
-                    "incident_id": inc["id"],
-                    "reasoning": f"{inc['priority']} {inc['type']} to {unit['id']}"
-                })
-                used_units.add(unit["id"])
-                break
-    return {"dispatches": dispatches}
+    unresolved = [i for i in incidents]
+
+    prompt = f"Step {obs['step']} — {obs['message']}\n\n"
+
+    if unresolved:
+        prompt += "ACTIVE INCIDENTS:\n"
+        for inc in unresolved:
+            prompt += (
+                f"  [{inc['priority'].upper()}] {inc['id']} | {inc['type']} | "
+                f"{inc['location']} | {inc['description']}\n"
+            )
+    else:
+        prompt += "No active incidents.\n"
+
+    prompt += "\nUNITS:\n"
+    for u in units:
+        prompt += (
+            f"  {u['id']} ({u['type']}) | status: {u['status']} | "
+            f"fuel: {u['fuel']:.0f}% | assigned: {u.get('assigned_incident') or 'none'}\n"
+        )
+
+    prompt += f"\nEpisode reward so far: {obs['episode_reward_so_far']}"
+    return prompt
 
 
-def run_task(task_name):
-    print(f"[STEP] event=task_start task={task_name}", flush=True)
+# ─────────────────────────────────────────────
+# LLM CALL
+# ─────────────────────────────────────────────
+def get_action(obs: dict, history: list) -> tuple[dict, str]:
+    user_msg = build_user_prompt(obs)
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages += history[-6:]  # keep last 3 turns for context
+    messages.append({"role": "user", "content": user_msg})
 
     try:
-        result_data = env_reset(task_name)
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=messages,
+            temperature=0.2,
+            max_tokens=512,
+        )
+        raw = response.choices[0].message.content.strip()
+
+        # Strip markdown fences if present
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        action = json.loads(raw)
+        history.append({"role": "assistant", "content": raw})
+        return action, raw
     except Exception as e:
-        print(f"[STEP] event=reset_error task={task_name} error={e}", flush=True)
-        print(f"[END] task={task_name} score=0.001 steps=0", flush=True)
-        return {"task": task_name, "grade_score": 0.001, "passed": False, "steps": 0, "total_reward": 0.0}
+        # Fallback: no-op action
+        fallback = {"dispatches": []}
+        history.append({"role": "assistant", "content": json.dumps(fallback)})
+        return fallback, f"ERROR: {e}"
 
-    obs = result_data if "active_incidents" in result_data else result_data.get("observation", result_data)
 
-    total_reward = 0.0
-    step = 0
+# ─────────────────────────────────────────────
+# RUN ONE TASK
+# ─────────────────────────────────────────────
+def run_task(task_name: str) -> dict:
+    history = []
+    obs = env_reset(task_name, seed=SEED)
     done = False
+    step = 0
+    total_reward = 0.0
+    step_logs = []
 
     while not done:
         step += 1
-        action = choose_action(obs)
+        action, raw_response = get_action(obs, history)
 
-        try:
-            result = env_step(action)
-        except Exception as e:
-            print(f"[STEP] task={task_name} step={step} error={e}", flush=True)
-            break
-
-        reward = result.get("reward", 0)
-        if isinstance(reward, dict):
-            reward = reward.get("total", 0)
-
+        result = env_step(action)
+        reward      = result["reward"]["total"]
+        done        = result["done"]
+        obs         = result["observation"]
         total_reward += reward
-        done = result.get("done", False)
-        obs = result.get("observation", obs)
-        if isinstance(obs, dict) and "observation" in obs:
-            obs = obs["observation"]
 
-        print(
-            f"[STEP] task={task_name} step={step} reward={round(reward, 4)} "
-            f"cumulative_reward={round(total_reward, 4)} done={done} "
-            f"resolved_count={obs.get('resolved_count', 0)} "
-            f"active_incidents={len(obs.get('active_incidents', []))}",
-            flush=True
-        )
+        step_log = {
+            "step": step,
+            "action": action,
+            "reward": reward,
+            "done": done,
+            "active_incidents": len(obs["active_incidents"]),
+            "resolved_count": obs["resolved_count"],
+        }
+        step_logs.append(step_log)
+
+        # ── [STEP] log ──
+        print(f"[STEP] step={step} reward={round(reward, 4)}", flush=True)
 
         if done:
             break
 
-    try:
-        grade = env_grade()
-        raw_score = grade.get("score", 0.5)
-    except Exception as e:
-        print(f"[STEP] event=grade_error task={task_name} error={e}", flush=True)
-        raw_score = 0.5
-
-    clamped_score = clamp_score(raw_score)
-    passed = grade.get("passed", False) if "grade" in dir() else False
-
-    print(f"[END] task={task_name} score={clamped_score} steps={step}", flush=True)
-
+    grade = env_grade()
     return {
         "task": task_name,
         "steps": step,
         "total_reward": round(total_reward, 4),
-        "grade_score": clamped_score,
-        "passed": passed,
+        "grade_score": grade["score"],
+        "grade_breakdown": grade["breakdown"],
+        "passed": grade["passed"],
+        "step_logs": step_logs,
     }
 
 
+# ─────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────
 def main():
     start_time = time.time()
     results = {}
+
+    # ── [START] log ──
+    for task_name in TASKS:
+        print(f"[START] task={task_name}", flush=True)
+    sys.stdout.flush()
 
     for task_name in TASKS:
         try:
             result = run_task(task_name)
             results[task_name] = result
+            # ── [END] log per task ──
+            print(f"[END] task={task_name} score={result['grade_score']} steps={result['steps']}", flush=True)
         except Exception as e:
-            print(f"[STEP] event=task_error task={task_name} error={e}", flush=True)
-            print(f"[END] task={task_name} score=0.001 steps=0", flush=True)
-            results[task_name] = {"grade_score": 0.001, "passed": False, "steps": 0}
+            results[task_name] = {
+                "task": task_name,
+                "error": str(e),
+                "grade_score": 0.0,
+                "passed": False,
+            }
+            print(f"[END] task={task_name} score=0.0 steps=0", flush=True)
 
     elapsed = round(time.time() - start_time, 2)
-    all_scores = [r.get("grade_score", 0.001) for r in results.values()]
-    avg_score = clamp_score(sum(all_scores) / len(all_scores))
-    passed_all = all(r.get("passed", False) for r in results.values())
-
-    print(
-        f"[END] model={MODEL_NAME} seed={SEED} elapsed_seconds={elapsed} "
-        f"average_grade_score={avg_score} passed_all={passed_all}",
-        flush=True
+    avg_score = round(
+        sum(r.get("grade_score", 0) for r in results.values()) / len(results), 4
     )
 
-    sys.exit(0)
+    # Exit code: 0 if all passed, 1 otherwise
+    sys.exit(0 if all(r.get("passed", False) for r in results.values()) else 1)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ Respond ONLY with valid JSON: {"dispatches": [{"unit_id": "F1", "incident_id": "
 If no action needed: {"dispatches": []}"""
 
 def call_llm(client, messages):
-    print(f"DEBUG calling LLM model={MODEL_NAME}", file=sys.stderr, flush=True)
+    print(f"DEBUG calling LLM model={MODEL_NAME} base={client.base_url}", file=sys.stderr, flush=True)
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
@@ -29,14 +29,15 @@ def get_action(client, obs):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
+    # DO NOT catch exceptions — let them surface so we can see the real error
+    raw = call_llm(client, messages)
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"): raw = raw[4:]
     try:
-        raw = call_llm(client, messages)
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"): raw = raw[4:]
         return json.loads(raw.strip())
-    except Exception as e:
-        print(f"LLM ERROR (full): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+    except json.JSONDecodeError:
+        print(f"JSON PARSE ERROR on: {raw}", file=sys.stderr, flush=True)
         return {"dispatches": []}
 
 def run_task(client, task_name):

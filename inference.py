@@ -47,7 +47,12 @@ def run_task(client, task_name):
         step += 1
         action = get_action(client, obs)
         result = requests.post(f"{ENV_URL}/step", json=action, timeout=30).json()
-        reward = result["reward"]["total"]
+        
+        # FIX: reward is a float, not a dict
+        reward = result["reward"]
+        if isinstance(reward, dict):
+            reward = reward.get("total", 0.0)
+        
         total_reward += reward
         print(f"[STEP] step={step} reward={round(reward,4)}", flush=True)
         obs = result["observation"]
@@ -55,7 +60,6 @@ def run_task(client, task_name):
             break
     grade = requests.get(f"{ENV_URL}/grade", timeout=30).json()
     return grade["score"], step
-
 def main():
     api_key      = os.environ["API_KEY"]
     api_base_url = os.environ["API_BASE_URL"]

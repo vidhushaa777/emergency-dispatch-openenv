@@ -87,7 +87,6 @@ def root():
 
 @app.post("/reset")
 async def reset(request: Request):
-    # Accept empty body OR json body
     try:
         body = await request.json()
     except Exception:
@@ -131,8 +130,10 @@ async def step(request: Request):
     for d in dispatches:
         unit_id = d.get("unit_id") if isinstance(d, dict) else d.unit_id
         inc_id  = d.get("incident_id") if isinstance(d, dict) else d.incident_id
+
         unit = unit_map.get(unit_id)
         inc  = inc_map.get(inc_id)
+
         if unit and inc and not inc["resolved"]:
             if unit["type"] == inc["type"] and unit["status"] == "idle" and unit["fuel"] > 10:
                 inc["resolved"] = True
@@ -148,10 +149,13 @@ async def step(request: Request):
             u["status"] = "idle"
 
     max_steps = state.get("max_steps", 20)
-    done = (state["step_count"] >= max_steps or
-            all(i["resolved"] for i in state["active_incidents"]))
+    done = (
+        state["step_count"] >= max_steps or
+        all(i["resolved"] for i in state["active_incidents"])
+    )
 
     state["scores"].append(reward)
+
     return {
         "observation": get_obs(),
         "reward": reward,
@@ -160,17 +164,29 @@ async def step(request: Request):
     }
 
 
+# 🔥 FINAL FIXED GRADE FUNCTION
 @app.get("/grade")
 def grade():
     total_incidents = len(state["active_incidents"])
     resolved = len(state["resolved"])
+
     ratio = resolved / total_incidents if total_incidents else 0.0
 
     high_res = sum(1 for i in state["resolved"] if i["priority"] == "high")
     high_tot = sum(1 for i in state["active_incidents"] if i["priority"] == "high")
+
     high_ratio = high_res / high_tot if high_tot else 1.0
 
-    score = round(0.6 * ratio + 0.4 * high_ratio, 4)
+    score = 0.6 * ratio + 0.4 * high_ratio
+
+    # 🔥 CRITICAL FIX (STRICT RANGE)
+    if score <= 0.0:
+        score = 0.001
+    elif score >= 1.0:
+        score = 0.999
+    else:
+        score = round(score, 4)
+
     passed = score >= 0.5
 
     return {

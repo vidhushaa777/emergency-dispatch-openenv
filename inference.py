@@ -1,20 +1,16 @@
 import os, json, sys, requests
+from openai import OpenAI
 
-ENV_URL      = os.environ.get("ENV_URL", "http://localhost:8000")
-MODEL_NAME   = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-HF_TOKEN     = os.environ.get("HF_TOKEN", "")
-OPENAI_KEY   = os.environ.get("API_KEY", os.environ.get("OPENAI_API_KEY", HF_TOKEN))
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
-TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
-SEED  = 42
+# MUST use exactly these — validator injects them
+API_KEY      = os.environ["API_KEY"]
+API_BASE_URL = os.environ["API_BASE_URL"]
 
-_client = None
-def get_client():
-    global _client
-    if _client is None:
-        from openai import OpenAI
-        _client = OpenAI(api_key=OPENAI_KEY, base_url=API_BASE_URL)
-    return _client
+ENV_URL    = os.environ.get("ENV_URL", "http://localhost:8000")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+TASKS      = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
+SEED       = 42
+
+client = OpenAI(api_key=API_KEY, base_url=API_BASE_URL)
 
 SYSTEM_PROMPT = """You are an emergency dispatch coordinator AI.
 Respond ONLY with valid JSON: {"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
@@ -25,7 +21,7 @@ def get_action(obs):
         incidents = obs.get("active_incidents", [])
         units = obs.get("units", [])
         msg = f"Incidents: {json.dumps(incidents)}\nUnits: {json.dumps(units)}"
-        response = get_client().chat.completions.create(
+        response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": msg}],
             temperature=0.2, max_tokens=512,
@@ -67,6 +63,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 

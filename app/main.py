@@ -1,107 +1,65 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import List, Optional
+import uvicorn
 import os
-import json
-import sys
-import requests
-from openai import OpenAI
 
-ENV_URL = os.environ.get("ENV_URL", "http://localhost:7860")
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
-TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
-SEED = 42
+from app.env import EmergencyDispatchEnv
+from app.tasks import TASKS
 
-SYSTEM_PROMPT = """You are an emergency dispatch coordinator AI.
-Respond ONLY with valid JSON:
-{"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
-If no action needed: {"dispatches": []}"""
+app = FastAPI(title="Emergency Dispatch OpenEnv")
 
-def call_llm(client, messages):
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.2,
-            max_tokens=200,
-        )
-        return response.choices[0].message.content
-    except:
-        return '{"dispatches": []}'
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def get_action(client, obs):
-    incidents = obs.get("active_incidents", [])
-    units = obs.get("units", [])
-    msg = f"Incidents: {json.dumps(incidents)}\nUnits: {json.dumps(units)}"
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": msg},
-    ]
-    try:
-        raw = call_llm(client, messages)
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return json.loads(raw.strip())
-    except:
-        return {"dispatches": []}
+env = EmergencyDispatchEnv()
 
-def run_task(client, task_name):
-    print(f"[START] task={task_name}", flush=True)
-    obs = requests.post(
-        f"{ENV_URL}/reset",
-        json={"task_name": task_name, "seed": SEED}
-    ).json()
-    step = 0
-    while True:
-        step += 1
-        action = get_action(client, obs)
-        result = requests.post(
-            f"{ENV_URL}/step",
-            json=action
-        ).json()
-        reward = result.get("reward", 0)
-        print(f"[STEP] task={task_name} step={step} reward={round(reward,4)}", flush=True)
-        obs = result.get("observation", {})
-        if result.get("done", False):
-            break
+class DispatchAction(BaseModel):
+    unit_id: str
+    incident_id: Optional[str] = None
+    reasoning: Optional[str] = ""
 
-    # ✅ FIXED: Fetch real score and clamp strictly within (0, 1)
-    try:
-        grade = requests.get(f"{ENV_URL}/grade").json()
-        score = float(grade.get("score", 0.5))
-    except:
-        score = 0.5
+class ActionRequest(BaseModel):
+    dispatches: List[DispatchAction] = []
 
-    if score <= 0.0:
-        score = 0.001
-    elif score >= 1.0:
-        score = 0.999
-    else:
-        score = round(score, 4)
+class ResetRequest(BaseModel):
+    task_name: Optional[str] = "standard_dispatch"
+    seed: Optional[int] = 42
 
-    print(f"[END] task={task_name} score={score} steps={step}", flush=True)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
-def main():
-    print("[START] model=dispatch_agent", flush=True)
-    api_key = os.environ.get("API_KEY")
-    api_base = os.environ.get("API_BASE_URL")
-    client = OpenAI(
-        api_key=api_key,
-        base_url=api_base
-    )
+@app.get("/tasks")
+def get_tasks():
+    return {"tasks": list(TASKS.keys())}
 
-    try:
-        client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": "hello"}],
-            max_tokens=5
-        )
-    except:
-        pass
+@app.post("/reset")
+def reset(body: Optional[ResetRequest] = None):
+    task_name = body.task_name if body else "standard_dispatch"
+    seed = body.seed if body else 42
+    obs = env.reset(task_name=task_name, seed=seed)
+    return obs
 
-    for task in TASKS:
-        run_task(client, task)
+@app.post("/step")
+def step(action: ActionRequest):
+    result = env.step(action.dict())
+    return result
 
-    sys.exit(0)
+@app.get("/state")
+def state():
+    return env.get_state()
+
+@app.get("/grade")
+def grade():
+    score = env.get_grade()
+    return {"score": score}
 
 if __name__ == "__main__":
-    main()
+    uvicorn.run(app, host="0.0.0.0", port=7860)

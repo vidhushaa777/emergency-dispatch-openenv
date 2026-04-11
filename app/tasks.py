@@ -145,7 +145,7 @@ def grade_standard_dispatch(episode_log: dict) -> tuple[float, dict]:
         rt_score = 0.0
 
     total = 0.40 * resolution_rate + 0.30 * correct_rate + 0.30 * rt_score
-    total = round(min(max(total, 0.0), 1.0), 4)
+    total = round(min(max(total, 0.001), 0.999), 4)
 
     breakdown = {
         "resolution_rate": round(resolution_rate, 4),
@@ -184,7 +184,7 @@ def grade_mass_casualty(episode_log: dict) -> tuple[float, dict]:
         0.25 * correct_rate +
         0.15 * fuel_eff
     )
-    total = round(min(max(total, 0.0), 1.0), 4)
+    total = round(min(max(total, 0.001), 0.999), 4)
 
     breakdown = {
         "high_priority_resolution": round(hi_rate, 4),
@@ -239,7 +239,7 @@ def grade_resource_scarcity(episode_log: dict) -> tuple[float, dict]:
         0.25 * fuel_score +
         0.20 * type_score
     )
-    total = round(min(max(total, 0.0), 1.0), 4)
+    total = round(min(max(total, 0.001), 0.999), 4)
 
     breakdown = {
         "priority_weighted_resolution": round(pw_score, 4),

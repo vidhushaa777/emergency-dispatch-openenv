@@ -4,7 +4,7 @@ import sys
 import requests
 from openai import OpenAI
 
-ENV_URL = os.environ.get("ENV_URL", "http://localhost:7860")
+ENV_URL = os.environ.get("ENV_URL", "http://localhost:8000")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
 SEED = 42
@@ -14,112 +14,118 @@ Respond ONLY with valid JSON:
 {"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
 If no action needed: {"dispatches": []}"""
 
+
 def call_llm(client, messages):
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=messages,
-            temperature=0.2,
-            max_tokens=200,
-        )
-        return response.choices[0].message.content
-    except:
-        return '{"dispatches": []}'
+    print(f"DEBUG calling LLM model={MODEL_NAME}", file=sys.stderr, flush=True)
+
+    response = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=messages,
+        temperature=0.2,
+        max_tokens=512,
+    )
+
+    print("DEBUG LLM response received", file=sys.stderr, flush=True)
+
+    return response.choices[0].message.content
+
 
 def get_action(client, obs):
     incidents = obs.get("active_incidents", [])
     units = obs.get("units", [])
+
     msg = f"Incidents: {json.dumps(incidents)}\nUnits: {json.dumps(units)}"
+
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
+
     try:
         raw = call_llm(client, messages)
+
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
+
         return json.loads(raw.strip())
-    except:
+
+    except Exception as e:
+        print(f"LLM ERROR (full): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         return {"dispatches": []}
 
+
 def run_task(client, task_name):
-    print(f"[START] task={task_name}", flush=True)
-    try:
-        obs = requests.post(
-            f"{ENV_URL}/reset",
-            json={"task_name": task_name, "seed": SEED}
-        ).json()
-    except Exception as e:
-        print(f"[ERROR] reset failed: {e}", flush=True)
-        return 0.5
+    obs = requests.post(
+        f"{ENV_URL}/reset",
+        json={"task_name": task_name, "seed": SEED},
+        timeout=30
+    ).json()
 
     step = 0
+    total_reward = 0.0
+
     while True:
         step += 1
+
         action = get_action(client, obs)
-        try:
-            result = requests.post(
-                f"{ENV_URL}/step",
-                json=action
-            ).json()
-        except Exception as e:
-            print(f"[ERROR] step failed: {e}", flush=True)
-            break
+
+        result = requests.post(
+            f"{ENV_URL}/step",
+            json=action,
+            timeout=30
+        ).json()
+
+        # FIX: reward is float (not dict)
         reward = result.get("reward", 0)
-        if isinstance(reward, dict):
-            reward = reward.get("total", 0)
-        print(f"[STEP] task={task_name} step={step} reward={round(float(reward),4)}", flush=True)
+
+        total_reward += reward
+
+        print(f"[STEP] step={step} reward={round(reward,4)}", flush=True)
+
         obs = result.get("observation", {})
+
         if result.get("done", False):
             break
 
-    try:
-        grade = requests.get(f"{ENV_URL}/grade").json()
-        raw_score = float(grade.get("score", 0.5))
-    except:
-        raw_score = 0.5
+    grade = requests.get(f"{ENV_URL}/grade", timeout=30).json()
 
-    # Force strictly within (0, 1)
-    if raw_score <= 0.0:
-        raw_score = 0.001
-    elif raw_score >= 1.0:
-        raw_score = 0.999
+    return grade.get("score", 0.5), step
 
-    score = round(max(0.001, min(0.999, raw_score)), 4)
-    print(f"[END] task={task_name} score={score} steps={step}", flush=True)
-    return score
 
 def main():
-    print("[START] model=dispatch_agent", flush=True)
-    api_key = os.environ.get("API_KEY")
-    api_base = os.environ.get("API_BASE_URL")
+    api_key = os.environ["API_KEY"]
+    api_base_url = os.environ["API_BASE_URL"]
+
+    # ❌ REMOVE THIS IF PROXY ALREADY HAS /v1 (but keeping as your original)
+    if not api_base_url.rstrip("/").endswith("/v1"):
+        api_base_url = api_base_url.rstrip("/") + "/v1"
+
+    print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
+    print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
+
     client = OpenAI(
         api_key=api_key,
-        base_url=api_base
+        base_url=api_base_url,
     )
-    try:
-        client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[{"role": "user", "content": "hello"}],
-            max_tokens=5
-        )
-    except:
-        pass
 
-    results = {}
     for task in TASKS:
-        score = run_task(client, task)
-        results[task] = score
+        print(f"[START] task={task}", flush=True)
 
-    print(f"[DEBUG] Final results: {json.dumps(results)}", flush=True)
+        score, steps = 0.0, 0
 
-    with open("results.json", "w") as f:
-        json.dump(results, f)
+        try:
+            score, steps = run_task(client, task)
 
-    print(f"[DONE] results={json.dumps(results)}", flush=True)
+        except Exception as e:
+            print(f"[STEP] step=0 reward=0.0", flush=True)
+            print(f"TASK ERROR: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
+
+        print(f"[END] task={task} score={score} steps={steps}", flush=True)
+
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

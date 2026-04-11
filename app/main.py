@@ -66,6 +66,7 @@ def state():
 @app.get("/grade")
 def grade():
     score, details = env.grade()
+    score = max(0.001, min(0.999, float(score)))
     return {"score": score, "details": details}
 
 if __name__ == "__main__":

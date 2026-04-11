@@ -1,10 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
 import uvicorn
-import os
 
 from app.env import EmergencyDispatchEnv
 from app.tasks import TASKS
@@ -44,22 +42,31 @@ def get_tasks():
 def reset(body: Optional[ResetRequest] = None):
     task_name = body.task_name if body else "standard_dispatch"
     seed = body.seed if body else 42
-    obs = env.reset(task_name=task_name, seed=seed)
+    env.__init__(task_name=task_name, seed=seed)
+    obs = env.reset()
     return obs
 
 @app.post("/step")
 def step(action: ActionRequest):
-    result = env.step(action.dict())
+    from app.models import Action, DispatchDecision
+    act = Action(dispatches=[
+        DispatchDecision(
+            unit_id=d.unit_id,
+            incident_id=d.incident_id,
+            reasoning=d.reasoning
+        ) for d in action.dispatches
+    ])
+    result = env.step(act)
     return result
 
 @app.get("/state")
 def state():
-    return env.get_state()
+    return env.state()
 
 @app.get("/grade")
 def grade():
-    score = env.get_grade()
-    return {"score": score}
+    score, details = env.grade()
+    return {"score": score, "details": details}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=7860)

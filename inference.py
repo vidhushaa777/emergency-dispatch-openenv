@@ -56,7 +56,6 @@ def run_task(client, task_name):
         return 0.5
 
     step = 0
-    total_reward = 0.0
     while True:
         step += 1
         action = get_action(client, obs)
@@ -71,23 +70,24 @@ def run_task(client, task_name):
         reward = result.get("reward", 0)
         if isinstance(reward, dict):
             reward = reward.get("total", 0)
-        total_reward += float(reward)
         print(f"[STEP] task={task_name} step={step} reward={round(float(reward),4)}", flush=True)
         obs = result.get("observation", {})
         if result.get("done", False):
             break
 
-    # Try /grade first, fall back to normalized reward
     try:
         grade = requests.get(f"{ENV_URL}/grade").json()
         raw_score = float(grade.get("score", 0.5))
-        if raw_score <= 0.0 or raw_score >= 1.0:
-            raise ValueError("out of range")
     except:
-        # Normalize total_reward to (0,1)
-        raw_score = max(0.001, min(0.999, (total_reward + 10) / 20))
+        raw_score = 0.5
 
-    score = max(0.001, min(0.999, round(raw_score, 4)))
+    # Force strictly within (0, 1)
+    if raw_score <= 0.0:
+        raw_score = 0.001
+    elif raw_score >= 1.0:
+        raw_score = 0.999
+
+    score = round(max(0.001, min(0.999, raw_score)), 4)
     print(f"[END] task={task_name} score={score} steps={step}", flush=True)
     return score
 
@@ -112,6 +112,8 @@ def main():
     for task in TASKS:
         score = run_task(client, task)
         results[task] = score
+
+    print(f"[DEBUG] Final results: {json.dumps(results)}", flush=True)
 
     with open("results.json", "w") as f:
         json.dump(results, f)

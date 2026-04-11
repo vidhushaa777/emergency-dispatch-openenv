@@ -147,26 +147,18 @@ def grade_standard_dispatch(episode_log: dict) -> tuple[float, dict]:
 
 
 def grade_mass_casualty(episode_log: dict) -> tuple[float, dict]:
-    """
-    Medium task grader.
-    Weights:
-      35% — high-priority resolution rate
-      25% — triage order score (did high come before low?)
-      25% — no wrong-type dispatches
-      15% — fuel efficiency
-    """
     high_resolved   = episode_log.get("high_priority_resolved", 0)
     high_spawned    = episode_log.get("high_priority_spawned", 1)
-    triage_score    = episode_log.get("triage_order_score", 0.0)   # pre-computed in env
+    triage_score    = episode_log.get("triage_order_score", 0.0)
     wrong_type      = episode_log.get("wrong_type_dispatches", 0)
     total_dispatches= episode_log.get("total_dispatches", 1)
     fuel_used       = episode_log.get("total_fuel_used", 1)
     resolved        = episode_log.get("resolved_count", 0)
 
-    hi_rate = min(high_resolved / max(high_spawned, 1), 1.0)
-    correct_rate = 1.0 - (wrong_type / max(total_dispatches, 1))
-    correct_rate = max(0.0, correct_rate)
-    fuel_eff = min(resolved / max(fuel_used / 20.0, 1), 1.0)
+    hi_rate = max(0.001, min(0.999, high_resolved / max(high_spawned, 1)))
+    correct_rate = max(0.001, min(0.999, 1.0 - (wrong_type / max(total_dispatches, 1))))
+    fuel_eff = max(0.001, min(0.999, resolved / max(fuel_used / 20.0, 1)))
+    triage_score = max(0.001, min(0.999, triage_score))
 
     total = (
         0.35 * hi_rate +
@@ -187,15 +179,6 @@ def grade_mass_casualty(episode_log: dict) -> tuple[float, dict]:
 
 
 def grade_resource_scarcity(episode_log: dict) -> tuple[float, dict]:
-    """
-    Hard task grader.
-    Weights:
-      30% — priority-weighted resolution score
-      25% — escalation avoidance (high-pri resolved before 8-step timeout)
-      25% — fuel conservation (units not running dry)
-      20% — multi-type coordination (all 3 types served)
-    """
-    # Priority-weighted resolution
     hi_res  = episode_log.get("high_priority_resolved", 0)
     med_res = episode_log.get("medium_priority_resolved", 0)
     lo_res  = episode_log.get("low_priority_resolved", 0)
@@ -208,20 +191,18 @@ def grade_resource_scarcity(episode_log: dict) -> tuple[float, dict]:
         0.3 * (med_res / max(med_sp, 1)) +
         0.1 * (lo_res / max(lo_sp, 1))
     )
+    pw_score = max(0.001, min(0.999, pw_score))
 
-    # Escalation avoidance
-    escalated   = episode_log.get("escalated_incidents", 0)
-    total_high  = max(hi_sp, 1)
-    esc_score   = 1.0 - min(escalated / total_high, 1.0)
+    escalated  = episode_log.get("escalated_incidents", 0)
+    total_high = max(hi_sp, 1)
+    esc_score  = max(0.001, min(0.999, 1.0 - min(escalated / total_high, 1.0)))
 
-    # Fuel conservation
-    units_depleted  = episode_log.get("units_depleted", 0)
-    total_units     = episode_log.get("total_units", 6)
-    fuel_score      = 1.0 - (units_depleted / max(total_units, 1))
+    units_depleted = episode_log.get("units_depleted", 0)
+    total_units    = episode_log.get("total_units", 6)
+    fuel_score     = max(0.001, min(0.999, 1.0 - (units_depleted / max(total_units, 1))))
 
-    # Multi-type coordination
-    types_served    = episode_log.get("incident_types_served", set())
-    type_score      = len(types_served) / 3.0
+    types_served = episode_log.get("incident_types_served", [])
+    type_score   = max(0.001, min(0.999, len(types_served) / 3.0))
 
     total = (
         0.30 * pw_score +

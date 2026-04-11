@@ -116,33 +116,23 @@ TASKS: Dict[str, TaskConfig] = {
 # ─────────────────────────────────────────────────────────
 
 def grade_standard_dispatch(episode_log: dict) -> tuple[float, dict]:
-    """
-    Easy task grader.
-    Weights:
-      40% — resolution rate (resolved / spawned)
-      30% — correct type dispatch rate
-      30% — average response time score
-    """
     resolved        = episode_log.get("resolved_count", 0)
     spawned         = episode_log.get("total_spawned", 1)
     wrong_type      = episode_log.get("wrong_type_dispatches", 0)
     total_dispatches= episode_log.get("total_dispatches", 1)
     resp_times      = episode_log.get("response_times", [])
 
-    # Component 1: resolution rate
-    resolution_rate = min(resolved / max(spawned, 1), 1.0)
+    resolution_rate = min(resolved / max(spawned, 1), 0.999)
+    resolution_rate = max(resolution_rate, 0.001)
 
-    # Component 2: correct type rate
     correct_rate = 1.0 - (wrong_type / max(total_dispatches, 1))
-    correct_rate = max(0.0, correct_rate)
+    correct_rate = max(0.001, min(0.999, correct_rate))
 
-    # Component 3: response time score
-    # score = 1.0 if avg < 5 steps, 0.0 if avg > 20 steps
     if resp_times:
         avg_rt = sum(resp_times) / len(resp_times)
-        rt_score = max(0.0, 1.0 - (avg_rt - 5) / 15)
+        rt_score = max(0.001, min(0.999, 1.0 - (avg_rt - 5) / 15))
     else:
-        rt_score = 0.0
+        rt_score = 0.001
 
     total = 0.40 * resolution_rate + 0.30 * correct_rate + 0.30 * rt_score
     total = round(min(max(total, 0.001), 0.999), 4)

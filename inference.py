@@ -45,21 +45,31 @@ def get_action(client, obs):
         return {"dispatches": []}
 
 def run_task(client, task_name):
-    print(f"[END] task={task_name} score={score} steps={step}", flush=True)
-    obs = requests.post(
-        f"{ENV_URL}/reset",
-        json={"task_name": task_name, "seed": SEED}
-    ).json()
+    print(f"[START] task={task_name}", flush=True)
+    try:
+        obs = requests.post(
+            f"{ENV_URL}/reset",
+            json={"task_name": task_name, "seed": SEED}
+        ).json()
+    except Exception as e:
+        print(f"[ERROR] reset failed: {e}", flush=True)
+        return 0.5
 
     step = 0
     while True:
         step += 1
         action = get_action(client, obs)
-        result = requests.post(
-            f"{ENV_URL}/step",
-            json=action
-        ).json()
+        try:
+            result = requests.post(
+                f"{ENV_URL}/step",
+                json=action
+            ).json()
+        except Exception as e:
+            print(f"[ERROR] step failed: {e}", flush=True)
+            break
         reward = result.get("reward", 0)
+        if isinstance(reward, dict):
+            reward = reward.get("total", 0)
         print(f"[STEP] task={task_name} step={step} reward={round(reward,4)}", flush=True)
         obs = result.get("observation", {})
         if result.get("done", False):
@@ -71,11 +81,9 @@ def run_task(client, task_name):
     except:
         raw_score = 0.5
 
-    # Strictly within (0, 1) — not 0.0, not 1.0
     score = max(0.001, min(0.999, round(raw_score, 4)))
-
     print(f"[END] task={task_name} score={score} steps={step}", flush=True)
-    return score  # ✅ RETURN the score
+    return score
 
 def main():
     print("[START] model=dispatch_agent", flush=True)
@@ -85,7 +93,6 @@ def main():
         api_key=api_key,
         base_url=api_base
     )
-
     try:
         client.chat.completions.create(
             model=MODEL_NAME,
@@ -95,13 +102,11 @@ def main():
     except:
         pass
 
-    
     results = {}
     for task in TASKS:
         score = run_task(client, task)
         results[task] = score
 
-    
     with open("results.json", "w") as f:
         json.dump(results, f)
 

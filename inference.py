@@ -30,16 +30,13 @@ def get_action(client, obs):
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
-    try:
-        raw = call_llm(client, messages)
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-        return json.loads(raw.strip())
-    except Exception as e:
-        print(f"LLM ERROR (full): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-        return {"dispatches": []}
+    # NO try/except — let errors surface so LLM calls are not silently skipped
+    raw = call_llm(client, messages)
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    return json.loads(raw.strip())
 
 def run_task(client, task_name):
     obs = requests.post(f"{ENV_URL}/reset", json={"task_name": task_name, "seed": SEED}, timeout=30).json()
@@ -48,18 +45,20 @@ def run_task(client, task_name):
         step += 1
         action = get_action(client, obs)
         result = requests.post(f"{ENV_URL}/step", json=action, timeout=30).json()
-        reward = result["reward"]["total"]
-        total_reward += reward
-        print(f"[STEP] step={step} reward={round(reward,4)}", flush=True)
-        obs = result["observation"]
-        if result["done"]:
+        reward = result.get("reward", {})
+        if isinstance(reward, dict):
+            reward = reward.get("total", 0.0)
+        total_reward += float(reward)
+        print(f"[STEP] step={step} reward={round(float(reward),4)}", flush=True)
+        obs = result.get("observation", {})
+        if result.get("done", False):
             break
     grade = requests.get(f"{ENV_URL}/grade", timeout=30).json()
     return grade["score"], step
 
 def main():
     api_key = os.environ["API_KEY"]
-    api_base_url = os.environ["API_BASE_URL"]  # ← only change: removed /v1 logic
+    api_base_url = os.environ["API_BASE_URL"]
 
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
     print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
@@ -68,6 +67,15 @@ def main():
         api_key=api_key,
         base_url=api_base_url,
     )
+
+    # Test call to verify proxy is reachable before running tasks
+    print("DEBUG testing LLM proxy...", file=sys.stderr, flush=True)
+    test_resp = client.chat.completions.create(
+        model=MODEL_NAME,
+        messages=[{"role": "user", "content": "hi"}],
+        max_tokens=5,
+    )
+    print(f"DEBUG proxy test OK: {test_resp.choices[0].message.content}", file=sys.stderr, flush=True)
 
     for task in TASKS:
         print(f"[START] task={task}", flush=True)

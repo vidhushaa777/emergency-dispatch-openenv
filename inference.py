@@ -45,7 +45,7 @@ def get_action(client, obs):
         return {"dispatches": []}
 
 def run_task(client, task_name):
-    print(f"[START] task={task_name}", flush=True)
+    print(f"[END] task={task_name} score={score} steps={step}", flush=True)
     obs = requests.post(
         f"{ENV_URL}/reset",
         json={"task_name": task_name, "seed": SEED}

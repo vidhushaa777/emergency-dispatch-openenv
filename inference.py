@@ -1,7 +1,4 @@
-import os
-import json
-import sys
-import requests
+import os, json, sys, requests
 from openai import OpenAI
 
 ENV_URL = os.environ.get("ENV_URL", "http://localhost:8000")
@@ -14,93 +11,55 @@ Respond ONLY with valid JSON:
 {"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
 If no action needed: {"dispatches": []}"""
 
-
 def call_llm(client, messages):
     print(f"DEBUG calling LLM model={MODEL_NAME}", file=sys.stderr, flush=True)
-
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         temperature=0.2,
         max_tokens=512,
     )
-
-    print("DEBUG LLM response received", file=sys.stderr, flush=True)
-
+    print(f"DEBUG LLM response received", file=sys.stderr, flush=True)
     return response.choices[0].message.content
-
 
 def get_action(client, obs):
     incidents = obs.get("active_incidents", [])
     units = obs.get("units", [])
-
     msg = f"Incidents: {json.dumps(incidents)}\nUnits: {json.dumps(units)}"
-
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": msg},
     ]
-
     try:
         raw = call_llm(client, messages)
-
         if raw.startswith("```"):
             raw = raw.split("```")[1]
             if raw.startswith("json"):
                 raw = raw[4:]
-
         return json.loads(raw.strip())
-
     except Exception as e:
         print(f"LLM ERROR (full): {type(e).__name__}: {e}", file=sys.stderr, flush=True)
         return {"dispatches": []}
 
-
 def run_task(client, task_name):
-    obs = requests.post(
-        f"{ENV_URL}/reset",
-        json={"task_name": task_name, "seed": SEED},
-        timeout=30
-    ).json()
-
-    step = 0
-    total_reward = 0.0
-
+    obs = requests.post(f"{ENV_URL}/reset", json={"task_name": task_name, "seed": SEED}, timeout=30).json()
+    step, total_reward = 0, 0.0
     while True:
         step += 1
-
         action = get_action(client, obs)
-
-        result = requests.post(
-            f"{ENV_URL}/step",
-            json=action,
-            timeout=30
-        ).json()
-
-        # FIX: reward is float (not dict)
-        reward = result.get("reward", 0)
-
+        result = requests.post(f"{ENV_URL}/step", json=action, timeout=30).json()
+        reward = result["reward"]["total"]
         total_reward += reward
-
         print(f"[STEP] step={step} reward={round(reward,4)}", flush=True)
-
-        obs = result.get("observation", {})
-
-        if result.get("done", False):
+        obs = result["observation"]
+        if result["done"]:
             break
-
     grade = requests.get(f"{ENV_URL}/grade", timeout=30).json()
-
-    return grade.get("score", 0.5), step
-
+    return grade["score"], step
 
 def main():
     api_key = os.environ["API_KEY"]
-    api_base_url = os.environ["API_BASE_URL"]
-
-    # ❌ REMOVE THIS IF PROXY ALREADY HAS /v1 (but keeping as your original)
-    if not api_base_url.rstrip("/").endswith("/v1"):
-        api_base_url = api_base_url.rstrip("/") + "/v1"
+    api_base_url = os.environ["API_BASE_URL"]  # ← only change: removed /v1 logic
 
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
     print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
@@ -112,20 +71,15 @@ def main():
 
     for task in TASKS:
         print(f"[START] task={task}", flush=True)
-
         score, steps = 0.0, 0
-
         try:
             score, steps = run_task(client, task)
-
         except Exception as e:
             print(f"[STEP] step=0 reward=0.0", flush=True)
             print(f"TASK ERROR: {type(e).__name__}: {e}", file=sys.stderr, flush=True)
-
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
 
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()

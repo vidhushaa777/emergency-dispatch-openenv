@@ -50,6 +50,7 @@ def run_task(client, task_name):
         f"{ENV_URL}/reset",
         json={"task_name": task_name, "seed": SEED}
     ).json()
+
     step = 0
     while True:
         step += 1
@@ -64,16 +65,17 @@ def run_task(client, task_name):
         if result.get("done", False):
             break
 
-    # ✅ FIXED: Fetch real score + bulletproof clamp strictly within (0, 1)
     try:
         grade = requests.get(f"{ENV_URL}/grade").json()
         raw_score = float(grade.get("score", 0.5))
     except:
         raw_score = 0.5
 
+    # Strictly within (0, 1) — not 0.0, not 1.0
     score = max(0.001, min(0.999, round(raw_score, 4)))
 
     print(f"[END] task={task_name} score={score} steps={step}", flush=True)
+    return score  # ✅ RETURN the score
 
 def main():
     print("[START] model=dispatch_agent", flush=True)
@@ -93,9 +95,17 @@ def main():
     except:
         pass
 
+    
+    results = {}
     for task in TASKS:
-        run_task(client, task)
+        score = run_task(client, task)
+        results[task] = score
 
+    
+    with open("results.json", "w") as f:
+        json.dump(results, f)
+
+    print(f"[DONE] results={json.dumps(results)}", flush=True)
     sys.exit(0)
 
 if __name__ == "__main__":

@@ -1,37 +1,39 @@
 import os, json, sys, requests
 from openai import OpenAI
 
-ENV_URL = os.environ.get("ENV_URL", "http://localhost:8000")
+ENV_URL    = os.environ.get("ENV_URL", "http://localhost:8000")
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
+
 TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
-SEED = 42
+SEED  = 42
 
 SYSTEM_PROMPT = """You are an emergency dispatch coordinator AI.
 Respond ONLY with valid JSON:
 {"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
 If no action needed: {"dispatches": []}"""
 
+
 def call_llm(client, messages):
-    print(f"DEBUG calling LLM model={MODEL_NAME}", file=sys.stderr, flush=True)
     response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         temperature=0.2,
         max_tokens=512,
     )
-    print(f"DEBUG LLM response received", file=sys.stderr, flush=True)
     return response.choices[0].message.content
+
 
 def get_action(client, obs):
     incidents = obs.get("active_incidents", [])
-    units = obs.get("units", [])
+    units     = obs.get("units", [])
     msg = f"Incidents: {json.dumps(incidents)}\nUnits: {json.dumps(units)}"
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": msg},
+        {"role": "user",   "content": msg},
     ]
-    # NO try/except around call_llm — must reach proxy
     raw = call_llm(client, messages)
+
+    # Strip markdown fences if present
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
@@ -41,33 +43,44 @@ def get_action(client, obs):
     except Exception:
         return {"dispatches": []}
 
+
 def run_task(client, task_name):
-    obs = requests.post(f"{ENV_URL}/reset", json={"task_name": task_name, "seed": SEED}, timeout=30).json()
+    obs = requests.post(
+        f"{ENV_URL}/reset",
+        json={"task_name": task_name, "seed": SEED},
+        timeout=30
+    ).json()
+
     step, total_reward = 0, 0.0
+
     while True:
         step += 1
         action = get_action(client, obs)
         result = requests.post(f"{ENV_URL}/step", json=action, timeout=30).json()
+
         reward = result.get("reward", {})
         if isinstance(reward, dict):
             reward = reward.get("total", 0.0)
-        total_reward += float(reward)
-        print(f"[STEP] step={step} reward={round(float(reward),4)}", flush=True)
+        reward = float(reward)
+        total_reward += reward
+
+        # ✅ REQUIRED structured output
+        print(f"[STEP] step={step} reward={round(reward, 4)}", flush=True)
+
         obs = result.get("observation", {})
         if result.get("done", False):
             break
+
     grade = requests.get(f"{ENV_URL}/grade", timeout=30).json()
-    return grade["score"], step
+    return grade.get("score", 0), step
+
 
 def main():
-    api_key = os.environ["API_KEY"]
-    api_base_url = os.environ["API_BASE_URL"].rstrip("/")
-
-    if not api_base_url.endswith("/v1"):
-        api_base_url = api_base_url + "/v1"
+    # ✅ Use injected credentials EXACTLY as provided — no modification
+    api_key      = os.environ["API_KEY"]
+    api_base_url = os.environ["API_BASE_URL"]   # ← do NOT append /v1
 
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
-    print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
 
     client = OpenAI(
         api_key=api_key,
@@ -85,6 +98,7 @@ def main():
         print(f"[END] task={task} score={score} steps={steps}", flush=True)
 
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

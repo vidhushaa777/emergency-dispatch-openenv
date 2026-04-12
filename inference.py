@@ -60,20 +60,19 @@ def run_task(client, task_name):
 
 def main():
     api_key = os.environ["API_KEY"]
-    base_url = os.environ["API_BASE_URL"]
-    client = OpenAI(
-        api_key=api_key,
-        base_url=base_url
-    )
-    
-    # Add /v1 only if not already present
+    api_base_url = os.environ["API_BASE_URL"]  # consistent variable name
+
+    # Ensure /v1 suffix before building the client
     if not api_base_url.endswith("/v1"):
-        api_base_url = api_base_url + "/v1
+        api_base_url = api_base_url + "/v1"
 
     print(f"DEBUG base_url={api_base_url}", file=sys.stderr, flush=True)
     print(f"DEBUG api_key prefix={api_key[:8]}...", file=sys.stderr, flush=True)
 
-    
+    client = OpenAI(
+        api_key=api_key,
+        base_url=api_base_url  # now uses the corrected URL
+    )
 
     for task in TASKS:
         print(f"[START] task={task}", flush=True)

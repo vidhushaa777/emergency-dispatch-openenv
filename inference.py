@@ -1,7 +1,7 @@
 import os, json, sys, requests
 from openai import OpenAI
 
-ENV_URL = os.environ["ENV_URL"]  # no localhost fallback — must come from platform
+ENV_URL = os.environ.get("ENV_URL", "http://localhost:8000")  # ← this line only
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
 SEED = 42

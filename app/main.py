@@ -42,7 +42,8 @@ def get_tasks():
 def reset(body: Optional[ResetRequest] = None):
     task_name = body.task_name if body else "standard_dispatch"
     seed = body.seed if body else 42
-    env.__init__(task_name=task_name, seed=seed)
+    global env
+    env = EmergencyDispatchEnv(task_name=task_name, seed=seed)  # recreate cleanly
     obs = env.reset()
     return obs
 

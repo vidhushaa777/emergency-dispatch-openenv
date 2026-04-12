@@ -1,7 +1,7 @@
 import os, json, sys, requests
 from openai import OpenAI
 
-ENV_URL = os.environ.get("ENV_URL", "http://localhost:8000")
+ENV_URL = os.environ["ENV_URL"]  # no localhost fallback — must come from platform
 MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o-mini")
 TASKS = ["standard_dispatch", "mass_casualty", "resource_scarcity"]
 SEED = 42
@@ -11,7 +11,6 @@ Respond ONLY with valid JSON:
 {"dispatches": [{"unit_id": "F1", "incident_id": "INC001", "reasoning": "reason"}]}
 If no action needed: {"dispatches": []}"""
 
-# Initialize client at module level — no try/except, fail loud if env vars missing
 client = OpenAI(
     api_key=os.environ["API_KEY"],
     base_url=os.environ["API_BASE_URL"]
@@ -56,7 +55,7 @@ def run_task(task_name):
 
     while True:
         step += 1
-        action = get_action(obs)  # LLM call — no silent fallback
+        action = get_action(obs)
         result = requests.post(f"{ENV_URL}/step", json=action, timeout=30).json()
 
         reward = result.get("reward", {})
